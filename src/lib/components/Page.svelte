@@ -103,7 +103,6 @@
 			{ kinds: [10002] }
 		);
 		await setUserPubkeys(ev10002PerAuthor, userPubkeysWriteMap, userPubkeysReadMap);
-		console.log('followees to fetch:', followingPubkeys);
 		message = `profiles of ${followingPubkeys.length} followees fetching...`;
 		profiles.clear();
 		await setProfiles(fetcher, relays, followingPubkeys, profiles);
