@@ -98,7 +98,7 @@
 		const ev10002PerAuthor = fetcher.fetchLastEventPerAuthor(
 			{
 				authors: followingPubkeys,
-				relayUrls: defaultRelays
+				relayUrls: relays
 			},
 			{ kinds: [10002] }
 		);
