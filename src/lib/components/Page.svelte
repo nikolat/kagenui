@@ -12,6 +12,7 @@
 		picture?: string;
 	};
 	type RelayType = 'Write' | 'Read';
+	type GroupType = 'All' | 'Required';
 	let npub: string = $state('');
 	let savedRelaysWrite: string[] = $state([]);
 	let savedRelaysRead: string[] = $state([]);
@@ -21,6 +22,7 @@
 	let isGettingEvents = $state(false);
 	let message = $state('');
 	let relayType: RelayType = $state('Write');
+	let groupType: GroupType = $state('All');
 
 	const getNpubWithNIP07 = async () => {
 		const nostr = window.nostr;
@@ -199,8 +201,46 @@
 		});
 	});
 
-	const savedRelays = $derived(relayType === 'Write' ? savedRelaysWrite : savedRelaysRead);
-	const userPubkeys = $derived(relayType === 'Write' ? userPubkeysWrite : userPubkeysRead);
+	const savedRelays: string[] = $derived(
+		relayType === 'Write' ? savedRelaysWrite : savedRelaysRead
+	);
+	const userPubkeys: [string, string[]][] = $derived(
+		relayType === 'Write' ? userPubkeysWrite : userPubkeysRead
+	);
+
+	const [requiredUserPubkeys, requiredRelays]: [[string, string[]][], string[]] = $derived.by(
+		() => {
+			const relaySet: Set<string> = new Set<string>();
+			const allPubkeySet: Set<string> = new Set<string>(userPubkeys.map((e) => e[1]).flat());
+			const userPubkeysMap: Map<string, Set<string>> = new Map<string, Set<string>>();
+			for (const up of userPubkeys) {
+				userPubkeysMap.set(up[0], new Set<string>(up[1]));
+			}
+			for (const relay of savedRelays) {
+				const usersUsing: Set<string> = userPubkeysMap.get(relay) ?? new Set<string>();
+				if (Array.from(usersUsing).some((p) => allPubkeySet.has(p))) {
+					relaySet.add(relay);
+					userPubkeysMap.set(
+						relay,
+						new Set<string>(Array.from(usersUsing).filter((p) => allPubkeySet.has(p)))
+					);
+					for (const p of usersUsing) {
+						allPubkeySet.delete(p);
+					}
+				}
+			}
+			const r: [string, string[]][] = [];
+			for (const [k, v] of userPubkeysMap) {
+				r.push([k, Array.from(v)]);
+			}
+			return [r, Array.from(relaySet)];
+		}
+	);
+
+	const filteredRelays: string[] = $derived(groupType === 'All' ? savedRelays : requiredRelays);
+	const filteredPubkeys: [string, string[]][] = $derived(
+		groupType === 'All' ? userPubkeys : requiredUserPubkeys
+	);
 </script>
 
 <svelte:head>
@@ -213,19 +253,34 @@
 	<button onclick={getNpubWithNIP07}>get public key from extension</button>
 	<input id="npub" type="text" placeholder="npub1... or nprofile1..." bind:value={npub} />
 	<button onclick={getRelays} disabled={!npub || isGettingEvents}>show relays of followees</button>
-	<span>Type</span>
-	<label>
-		<input type="radio" bind:group={relayType} name="relaytype" value="Write" />
-		Write
-	</label>
-	<label>
-		<input type="radio" bind:group={relayType} name="relaytype" value="Read" />
-		Read
-	</label>
+	<dl>
+		<dt>Type</dt>
+		<dd>
+			<label>
+				<input type="radio" bind:group={relayType} name="relaytype" value="Write" />
+				Write
+			</label>
+			<label>
+				<input type="radio" bind:group={relayType} name="relaytype" value="Read" />
+				Read
+			</label>
+		</dd>
+		<dt>Group</dt>
+		<dd>
+			<label>
+				<input type="radio" bind:group={groupType} name="grouptype" value="All" />
+				All
+			</label>
+			<label>
+				<input type="radio" bind:group={groupType} name="grouptype" value="Required" />
+				Required
+			</label>
+		</dd>
+	</dl>
 	<p>{message}</p>
 	<dl>
-		{#each savedRelays as relay (relay)}
-			{@const pubkeys = userPubkeys.filter(([r]) => r === relay).at(0)}
+		{#each filteredRelays as relay (relay)}
+			{@const pubkeys = filteredPubkeys.filter(([r]) => r === relay).at(0)}
 			<dt>{relay}</dt>
 			<dd>
 				<span>
