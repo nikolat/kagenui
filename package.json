@@ -38,7 +38,8 @@
 		"vitest": "^3.2.1"
 	},
 	"dependencies": {
-		"nostr-fetch": "^0.17.0",
-		"nostr-tools": "^2.14.1"
+		"@rx-nostr/crypto": "^0.0.0",
+		"nostr-tools": "^2.14.1",
+		"rx-nostr": "^3.6.1"
 	}
 }

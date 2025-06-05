@@ -1,9 +1,19 @@
 <script lang="ts">
-	import { NostrFetcher, type NostrEventWithAuthor } from 'nostr-fetch';
 	import type { NostrEvent } from 'nostr-tools/pure';
 	import { normalizeURL } from 'nostr-tools/utils';
 	import * as nip19 from 'nostr-tools/nip19';
-	import { defaultRelays, getRoboHashURL, linkGitHub, linkto } from '$lib/config';
+	import {
+		createRxBackwardReq,
+		createRxNostr,
+		latestEach,
+		type EventPacket,
+		type LazyFilter,
+		type RetryConfig,
+		type RxNostr,
+		type RxNostrUseOptions
+	} from 'rx-nostr';
+	import { verifier } from '@rx-nostr/crypto';
+	import { indexerRelays, getRoboHashURL, linkGitHub, linkto, profileRelays } from '$lib/config';
 	import { onMount } from 'svelte';
 
 	type Profile = {
@@ -18,7 +28,7 @@
 	let savedRelaysRead: string[] = $state([]);
 	let userPubkeysWrite: [string, string[]][] = $state([]);
 	let userPubkeysRead: [string, string[]][] = $state([]);
-	let profiles = $state(new Map<string, Profile>());
+	let profileMap = $state(new Map<string, Profile>());
 	let isGettingEvents = $state(false);
 	let message = $state('');
 	let relayType: RelayType = $state('Write');
@@ -36,13 +46,40 @@
 		}
 	};
 
+	const fetchEvents = (
+		rxNostr: RxNostr,
+		next: (value: EventPacket) => void,
+		complete: () => void,
+		filter: LazyFilter,
+		options?: Partial<RxNostrUseOptions>
+	) => {
+		const rxReq = createRxBackwardReq();
+		rxNostr
+			.use(rxReq, options)
+			.pipe(latestEach(({ event }) => `${event.kind}:${event.pubkey}`))
+			.subscribe({
+				next,
+				complete
+			});
+		rxReq.emit(filter);
+		rxReq.over();
+	};
+
 	const getRelays = async () => {
+		const retry: RetryConfig = {
+			strategy: 'exponential',
+			maxCount: 3,
+			initialDelay: 1000,
+			polite: true
+		};
+		const rxNostr = createRxNostr({ verifier, retry, authenticator: 'auto' });
+		rxNostr.setDefaultRelays(indexerRelays);
 		savedRelaysWrite = [];
 		savedRelaysRead = [];
 		userPubkeysWrite = [];
 		userPubkeysRead = [];
-		const userPubkeysWriteMap = $state(new Map<string, Set<string>>());
-		const userPubkeysReadMap = $state(new Map<string, Set<string>>());
+		const userPubkeysWriteMap = new Map<string, Set<string>>();
+		const userPubkeysReadMap = new Map<string, Set<string>>();
 		let dr;
 		try {
 			dr = nip19.decode(npub);
@@ -51,14 +88,10 @@
 			return;
 		}
 		let pubkey: string;
-		let relaySet = new Set<string>(defaultRelays);
 		if (dr.type === 'npub') {
 			pubkey = dr.data;
 		} else if (dr.type === 'nprofile') {
 			pubkey = dr.data.pubkey;
-			if (dr.data.relays !== undefined) {
-				for (const relay of dr.data.relays) relaySet.add(normalizeURL(relay));
-			}
 		} else {
 			console.error(`${npub} is not npub/nprofile`);
 			return;
@@ -66,127 +99,127 @@
 		const targetPubkey = pubkey;
 		isGettingEvents = true;
 		message = 'getting relays...';
-		const fetcher = NostrFetcher.init();
-		const ev10002: NostrEvent | undefined = await fetcher.fetchLastEvent(Array.from(relaySet), {
-			kinds: [10002],
-			authors: [targetPubkey]
-		});
-		if (ev10002 !== undefined) {
+		let ev10002: NostrEvent | undefined;
+		let ev3: NostrEvent | undefined;
+		const ev10002Map = new Map<string, NostrEvent>();
+		const next1 = (value: EventPacket): void => {
+			ev10002 = value.event;
+		};
+		const next2 = (value: EventPacket): void => {
+			ev3 = value.event;
+		};
+		const next3 = (value: EventPacket): void => {
+			ev10002Map.set(value.event.pubkey, value.event);
+		};
+		const next4 = (value: EventPacket): void => {
+			let profile;
+			try {
+				profile = JSON.parse(value.event.content);
+			} catch (error) {
+				console.warn(error);
+				return;
+			}
+			profileMap.set(value.event.pubkey, profile);
+		};
+		const complete1 = (): void => {
+			if (ev10002 === undefined) {
+				console.warn('kind:10000 event does not exist');
+				isGettingEvents = false;
+				return;
+			}
+			const relaySet = new Set<string>();
 			for (const tag of ev10002.tags.filter(
 				(tag) => tag.length >= 2 && tag[0] === 'r' && URL.canParse(tag[1])
 			)) {
-				if (tag.length === 2 || tag[2] === 'read') {
+				if (tag.length === 2 || tag[2] === 'write') {
 					relaySet.add(normalizeURL(tag[1]));
 				}
 			}
-		}
-		const relays = Array.from(relaySet);
-		console.log('relays:', relays);
-		message = `${relays.length} relays`;
-		const ev3: NostrEvent | undefined = await fetcher.fetchLastEvent(relays, {
-			kinds: [3],
-			authors: [targetPubkey]
-		});
-		if (ev3 === undefined) {
-			console.warn('followees is 0');
-			isGettingEvents = false;
-			return;
-		}
-		const followingPubkeys = ev3.tags.filter((tag) => tag[0] === 'p').map((tag) => tag[1]);
-		console.log('followees:', followingPubkeys);
-		message = `${followingPubkeys.length} followees`;
-		const ev10002PerAuthor = fetcher.fetchLastEventPerAuthor(
-			{
-				authors: followingPubkeys,
-				relayUrls: relays
-			},
-			{ kinds: [10002] }
-		);
-		await setUserPubkeys(ev10002PerAuthor, userPubkeysWriteMap, userPubkeysReadMap);
-		message = `profiles of ${followingPubkeys.length} followees fetching...`;
-		profiles.clear();
-		await setProfiles(fetcher, relays, followingPubkeys, profiles);
-
-		const userPubkeysWriteBase: [string, string[]][] = [];
-		const userPubkeysReadBase: [string, string[]][] = [];
-		for (const [relay, pubkeySet] of userPubkeysWriteMap) {
-			userPubkeysWriteBase.push([relay, Array.from(pubkeySet)]);
-		}
-		for (const [relay, pubkeySet] of userPubkeysReadMap) {
-			userPubkeysReadBase.push([relay, Array.from(pubkeySet)]);
-		}
-		const compareFn = (a: [string, string[]], b: [string, string[]]) => {
-			return b[1].length - a[1].length;
+			const relays = Array.from(relaySet);
+			console.info('relays:', relays);
+			message = `${relays.length} relays`;
+			const filter: LazyFilter = {
+				kinds: [3],
+				authors: [targetPubkey]
+			};
+			fetchEvents(rxNostr, next2, complete2, filter, { relays });
 		};
-		userPubkeysWrite = userPubkeysWriteBase.toSorted(compareFn);
-		userPubkeysRead = userPubkeysReadBase.toSorted(compareFn);
-		savedRelaysWrite = userPubkeysWrite.map(([relay]) => relay);
-		savedRelaysRead = userPubkeysRead.map(([relay]) => relay);
-
-		isGettingEvents = false;
-		message = 'complete';
-	};
-
-	const setUserPubkeys = async (
-		itr: AsyncIterable<NostrEventWithAuthor<false>>,
-		userPubkeysWriteMap: Map<string, Set<string>>,
-		userPubkeysReadMap: Map<string, Set<string>>
-	): Promise<void> => {
-		for await (const { author, event } of itr) {
-			if (event === undefined) {
-				continue;
+		const complete2 = (): void => {
+			if (ev3 === undefined) {
+				console.warn('kind:3 event does not exist');
+				isGettingEvents = false;
+				return;
 			}
-			for (const tag of event.tags.filter(
-				(tag) => tag.length >= 2 && tag[0] === 'r' && URL.canParse(tag[1])
-			)) {
-				const url: string = normalizeURL(tag[1]);
-				const isWrite: boolean = tag.length === 2 || tag[2] === 'write';
-				const isRead: boolean = tag.length === 2 || tag[2] === 'read';
-				const userPubkeysArray: Map<string, Set<string>>[] = [];
-				if (isWrite) {
-					userPubkeysArray.push(userPubkeysWriteMap);
-				}
-				if (isRead) {
-					userPubkeysArray.push(userPubkeysReadMap);
-				}
-				for (const userPubkeys of userPubkeysArray) {
-					let v = userPubkeys.get(url);
-					if (v === undefined) {
-						v = new Set<string>();
+			const followingPubkeys = ev3.tags
+				.filter((tag) => tag.length >= 2 && tag[0] === 'p')
+				.map((tag) => tag[1]);
+			console.log('followees:', followingPubkeys);
+			message = `${followingPubkeys.length} followees`;
+			const filter: LazyFilter = {
+				kinds: [10002],
+				authors: followingPubkeys
+			};
+			fetchEvents(rxNostr, next3, complete3, filter);
+		};
+		const complete3 = (): void => {
+			for (const [pubkey, event] of ev10002Map) {
+				for (const tag of event.tags.filter(
+					(tag) => tag.length >= 2 && tag[0] === 'r' && URL.canParse(tag[1])
+				)) {
+					const url: string = normalizeURL(tag[1]);
+					const isWrite: boolean = tag.length === 2 || tag[2] === 'write';
+					const isRead: boolean = tag.length === 2 || tag[2] === 'read';
+					const userPubkeysArray: Map<string, Set<string>>[] = [];
+					if (isWrite) {
+						userPubkeysArray.push(userPubkeysWriteMap);
 					}
-					v.add(author);
-					userPubkeys.set(url, v);
+					if (isRead) {
+						userPubkeysArray.push(userPubkeysReadMap);
+					}
+					for (const userPubkeys of userPubkeysArray) {
+						let v = userPubkeys.get(url);
+						if (v === undefined) {
+							v = new Set<string>();
+						}
+						v.add(pubkey);
+						userPubkeys.set(url, v);
+					}
 				}
 			}
-		}
-	};
+			const followingPubkeys = Array.from(ev10002Map.keys());
+			message = `profiles of ${followingPubkeys.length} followees fetching...`;
+			profileMap.clear();
+			const filter: LazyFilter = {
+				kinds: [0],
+				authors: followingPubkeys
+			};
+			fetchEvents(rxNostr, next4, complete4, filter, { relays: profileRelays });
+		};
+		const complete4 = (): void => {
+			const userPubkeysWriteBase: [string, string[]][] = [];
+			const userPubkeysReadBase: [string, string[]][] = [];
+			for (const [relay, pubkeySet] of userPubkeysWriteMap) {
+				userPubkeysWriteBase.push([relay, Array.from(pubkeySet)]);
+			}
+			for (const [relay, pubkeySet] of userPubkeysReadMap) {
+				userPubkeysReadBase.push([relay, Array.from(pubkeySet)]);
+			}
+			const compareFn = (a: [string, string[]], b: [string, string[]]) => {
+				return b[1].length - a[1].length;
+			};
+			userPubkeysWrite = userPubkeysWriteBase.toSorted(compareFn);
+			userPubkeysRead = userPubkeysReadBase.toSorted(compareFn);
+			savedRelaysWrite = userPubkeysWrite.map(([relay]) => relay);
+			savedRelaysRead = userPubkeysRead.map(([relay]) => relay);
 
-	const setProfiles = async (
-		fetcher: NostrFetcher,
-		relays: string[],
-		pubkeys: string[],
-		profiles: Map<string, Profile>
-	): Promise<void> => {
-		const ev0PerAuthor = fetcher.fetchLastEventPerAuthor(
-			{
-				authors: pubkeys,
-				relayUrls: relays
-			},
-			{ kinds: [0] }
-		);
-		for await (const { author, event } of ev0PerAuthor) {
-			if (event === undefined) {
-				continue;
-			}
-			let profile;
-			try {
-				profile = JSON.parse(event.content);
-			} catch (error) {
-				console.warn(error);
-				continue;
-			}
-			profiles.set(author, profile);
-		}
+			isGettingEvents = false;
+			message = 'complete';
+		};
+		const filter: LazyFilter = {
+			kinds: [10002],
+			authors: [targetPubkey]
+		};
+		fetchEvents(rxNostr, next1, complete1, filter);
 	};
 
 	onMount(() => {
@@ -284,7 +317,7 @@
 			<dd>
 				<span>
 					{#each pubkeys?.at(1) ?? [] as pubkey (pubkey)}
-						{@const prof = profiles.get(pubkey)}
+						{@const prof = profileMap.get(pubkey)}
 						{@const name = prof?.name ?? nip19.npubEncode(pubkey).slice(0, 10) + '...'}
 						{@const display_name = prof?.display_name ?? ''}
 						{@const picture = prof?.picture ?? getRoboHashURL(pubkey)}
