@@ -6,6 +6,8 @@
 		createRxBackwardReq,
 		createRxNostr,
 		latestEach,
+		now,
+		type ConnectionStatePacket,
 		type EventPacket,
 		type LazyFilter,
 		type RetryConfig,
@@ -46,6 +48,14 @@
 		}
 	};
 
+	const relayStateMap: Map<string, string> = new Map<string, string>();
+	let relayState: [string, string][] = $state([]);
+	const callbackConnectionState = (packet: ConnectionStatePacket) => {
+		const relay: string = normalizeURL(packet.from);
+		relayStateMap.set(relay, packet.state);
+		relayState = Array.from(relayStateMap.entries());
+	};
+
 	const fetchEvents = (
 		rxNostr: RxNostr,
 		next: (value: EventPacket) => void,
@@ -74,6 +84,7 @@
 		};
 		const rxNostr = createRxNostr({ verifier, retry, authenticator: 'auto' });
 		rxNostr.setDefaultRelays(indexerRelays);
+		rxNostr.createConnectionStateObservable().subscribe(callbackConnectionState);
 		savedRelaysWrite = [];
 		savedRelaysRead = [];
 		userPubkeysWrite = [];
@@ -140,7 +151,8 @@
 			message = `${relays.length} relays`;
 			const filter: LazyFilter = {
 				kinds: [3],
-				authors: [targetPubkey]
+				authors: [targetPubkey],
+				until: now
 			};
 			fetchEvents(rxNostr, next2, complete2, filter, { relays });
 		};
@@ -157,7 +169,8 @@
 			message = `${followingPubkeys.length} followees`;
 			const filter: LazyFilter = {
 				kinds: [10002],
-				authors: followingPubkeys
+				authors: followingPubkeys,
+				until: now
 			};
 			fetchEvents(rxNostr, next3, complete3, filter);
 		};
@@ -187,13 +200,22 @@
 				}
 			}
 			const followingPubkeys = Array.from(ev10002Map.keys());
+			const relaysAll: string[] = Array.from(userPubkeysWriteMap.keys());
 			message = `profiles of ${followingPubkeys.length} followees fetching...`;
 			profileMap.clear();
 			const filter: LazyFilter = {
 				kinds: [0],
-				authors: followingPubkeys
+				authors: followingPubkeys,
+				until: now
 			};
 			fetchEvents(rxNostr, next4, complete4, filter, { relays: profileRelays });
+			fetchEvents(
+				rxNostr,
+				(_value: EventPacket) => {},
+				() => {},
+				{ kinds: [0], authors: [targetPubkey], until: now },
+				{ relays: relaysAll }
+			);
 		};
 		const complete4 = (): void => {
 			const userPubkeysWriteBase: [string, string[]][] = [];
@@ -217,7 +239,8 @@
 		};
 		const filter: LazyFilter = {
 			kinds: [10002],
-			authors: [targetPubkey]
+			authors: [targetPubkey],
+			until: now
 		};
 		fetchEvents(rxNostr, next1, complete1, filter);
 	};
@@ -273,6 +296,30 @@
 	const filteredPubkeys: [string, string[]][] = $derived(
 		groupType === 'All' ? userPubkeys : requiredUserPubkeys
 	);
+
+	const getMark = (state: string): string => {
+		let mark: string;
+		switch (state) {
+			case 'connected':
+				mark = '🟢';
+				break;
+			case 'dormant':
+				mark = '🔵';
+				break;
+			case 'error':
+			case 'rejected':
+				mark = '🔴';
+				break;
+			case 'connecting':
+			case 'retrying':
+				mark = '🟡';
+				break;
+			default:
+				mark = '🟣';
+				break;
+		}
+		return mark;
+	};
 </script>
 
 <svelte:head>
@@ -313,7 +360,8 @@
 	<dl>
 		{#each filteredRelays as relay (relay)}
 			{@const pubkeys = filteredPubkeys.filter(([r]) => r === relay).at(0)}
-			<dt>{relay}</dt>
+			{@const state = relayState.find((rs) => rs[0] === relay)?.at(1) ?? ''}
+			<dt><span title={state}>{getMark(state)}</span>{relay}</dt>
 			<dd>
 				<span>
 					{#each pubkeys?.at(1) ?? [] as pubkey (pubkey)}
