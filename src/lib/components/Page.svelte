@@ -32,6 +32,7 @@
 	let userPubkeysRead: [string, string[]][] = $state([]);
 	let profileMap = $state(new Map<string, Profile>());
 	let blockedRelays: string[] = $state([]);
+	let deadRelays: string[] = $state([]);
 	let isGettingEvents = $state(false);
 	let message = $state('');
 	let relayType: RelayType = $state('Write');
@@ -55,6 +56,15 @@
 		const relay: string = normalizeURL(packet.from);
 		relayStateMap.set(relay, packet.state);
 		relayState = Array.from(relayStateMap.entries());
+		if (['error', 'rejected'].includes(packet.state)) {
+			if (!deadRelays.includes(relay)) {
+				deadRelays.push(relay);
+			}
+		} else {
+			if (deadRelays.includes(relay)) {
+				deadRelays = deadRelays.filter((r) => r !== relay);
+			}
+		}
 	};
 
 	const fetchEvents = (
@@ -283,7 +293,9 @@
 			for (const up of userPubkeys) {
 				userPubkeysMap.set(up[0], new Set<string>(up[1]));
 			}
-			for (const relay of savedRelays) {
+			for (const relay of savedRelays.filter(
+				(r) => !blockedRelays.includes(r) && !deadRelays.includes(r)
+			)) {
 				const usersUsing: Set<string> = userPubkeysMap.get(relay) ?? new Set<string>();
 				if (Array.from(usersUsing).some((p) => allPubkeySet.has(p))) {
 					relaySet.add(relay);
