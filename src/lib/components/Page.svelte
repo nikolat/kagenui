@@ -31,6 +31,7 @@
 	let userPubkeysWrite: [string, string[]][] = $state([]);
 	let userPubkeysRead: [string, string[]][] = $state([]);
 	let profileMap = $state(new Map<string, Profile>());
+	let blockedRelays: string[] = $state([]);
 	let isGettingEvents = $state(false);
 	let message = $state('');
 	let relayType: RelayType = $state('Write');
@@ -117,7 +118,18 @@
 			ev10002 = value.event;
 		};
 		const next2 = (value: EventPacket): void => {
-			ev3 = value.event;
+			switch (value.event.kind) {
+				case 3:
+					ev3 = value.event;
+					break;
+				case 10006:
+					blockedRelays = value.event.tags
+						.filter((tag) => tag.length >= 2 && tag[0] === 'relay' && URL.canParse(tag[1]))
+						.map((tag) => tag[1]);
+					break;
+				default:
+					break;
+			}
 		};
 		const next3 = (value: EventPacket): void => {
 			ev10002Map.set(value.event.pubkey, value.event);
@@ -150,7 +162,7 @@
 			console.info('relays:', relays);
 			message = `${relays.length} relays`;
 			const filter: LazyFilter = {
-				kinds: [3],
+				kinds: [3, 10006],
 				authors: [targetPubkey],
 				until: now
 			};
@@ -361,7 +373,11 @@
 		{#each filteredRelays as relay (relay)}
 			{@const pubkeys = filteredPubkeys.filter(([r]) => r === relay).at(0)}
 			{@const state = relayState.find((rs) => rs[0] === relay)?.at(1) ?? ''}
-			<dt><span title={state}>{getMark(state)}</span>{relay}</dt>
+			<dt>
+				<span title={state}>{getMark(state)}</span>
+				{#if blockedRelays.includes(relay)}<span title="blocked by you">🚫</span>{/if}
+				{relay}
+			</dt>
 			<dd>
 				<span>
 					{#each pubkeys?.at(1) ?? [] as pubkey (pubkey)}
@@ -395,6 +411,8 @@
 	.avatar_relay {
 		width: 16px;
 		height: 16px;
+		border-radius: 10%;
+		object-fit: cover;
 	}
 	dd {
 		clear: left;
