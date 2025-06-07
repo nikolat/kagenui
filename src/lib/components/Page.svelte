@@ -156,7 +156,8 @@
 		};
 		const complete1 = (): void => {
 			if (ev10002 === undefined) {
-				console.warn('kind:10000 event does not exist');
+				message = 'kind:10002 event does not exist';
+				console.warn(message);
 				isGettingEvents = false;
 				return;
 			}
@@ -180,7 +181,8 @@
 		};
 		const complete2 = (): void => {
 			if (ev3 === undefined) {
-				console.warn('kind:3 event does not exist');
+				message = 'kind:3 event does not exist';
+				console.warn(message);
 				isGettingEvents = false;
 				return;
 			}
