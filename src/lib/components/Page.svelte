@@ -1,10 +1,11 @@
 <script lang="ts">
-	import type { NostrEvent } from 'nostr-tools/pure';
+	import type { EventTemplate, NostrEvent } from 'nostr-tools/pure';
 	import { normalizeURL } from 'nostr-tools/utils';
 	import type { RelayRecord } from 'nostr-tools/relay';
 	import * as nip19 from 'nostr-tools/nip19';
 	import {
 		createRxBackwardReq,
+		createRxForwardReq,
 		createRxNostr,
 		latestEach,
 		now,
@@ -13,6 +14,7 @@
 		type LazyFilter,
 		type RetryConfig,
 		type RxNostr,
+		type RxNostrSendOptions,
 		type RxNostrUseOptions
 	} from 'rx-nostr';
 	import { verifier } from '@rx-nostr/crypto';
@@ -69,6 +71,16 @@
 		}
 	};
 
+	const retry: RetryConfig = {
+		strategy: 'exponential',
+		maxCount: 3,
+		initialDelay: 1000,
+		polite: true
+	};
+	const rxNostr = createRxNostr({ verifier, retry, authenticator: 'auto' });
+	rxNostr.setDefaultRelays(indexerRelays);
+	rxNostr.createConnectionStateObservable().subscribe(callbackConnectionState);
+
 	const fetchEvents = (
 		rxNostr: RxNostr,
 		next: (value: EventPacket) => void,
@@ -87,17 +99,22 @@
 		rxReq.emit(filter);
 		rxReq.over();
 	};
+	const fetchFoward = (
+		rxNostr: RxNostr,
+		next: (value: EventPacket) => void,
+		complete: () => void,
+		filter: LazyFilter,
+		options?: Partial<RxNostrUseOptions>
+	) => {
+		const rxReq = createRxForwardReq();
+		rxNostr.use(rxReq, options).subscribe({
+			next,
+			complete
+		});
+		rxReq.emit(filter);
+	};
 
 	const getRelays = async () => {
-		const retry: RetryConfig = {
-			strategy: 'exponential',
-			maxCount: 3,
-			initialDelay: 1000,
-			polite: true
-		};
-		const rxNostr = createRxNostr({ verifier, retry, authenticator: 'auto' });
-		rxNostr.setDefaultRelays(indexerRelays);
-		rxNostr.createConnectionStateObservable().subscribe(callbackConnectionState);
 		savedRelaysWrite = [];
 		savedRelaysRead = [];
 		userPubkeysWrite = [];
@@ -269,6 +286,19 @@
 
 			isGettingEvents = false;
 			message = 'complete';
+
+			if (relaysToUse === undefined) {
+				return;
+			}
+			const filter: LazyFilter = {
+				kinds: [3, 10002, 10006],
+				authors: [targetPubkey],
+				since: now
+			};
+			const relays: string[] = Object.entries(relaysToUse)
+				.filter((r) => r[1].write)
+				.map((r) => r[0]);
+			fetchFoward(rxNostr, next2, () => {}, filter, { relays });
 		};
 		const filter: LazyFilter = {
 			kinds: [10002],
@@ -380,6 +410,37 @@
 		}
 		return mark;
 	};
+
+	const removeDeadRelays = async (): Promise<void> => {
+		if (relaysToUse === undefined || window.nostr === undefined) {
+			return;
+		}
+		const eventTemplate: EventTemplate = {
+			kind: 10002,
+			tags: [],
+			content: '',
+			created_at: now()
+		};
+		for (const r of Object.entries(relaysToUse)) {
+			if (deadRelays.includes(r[0])) {
+				continue;
+			}
+			const tag = ['relay', r[0]];
+			if (r[1].read && !r[1].write) {
+				tag.push('read');
+			} else if (!r[1].read && r[1].write) {
+				tag.push('write');
+			}
+			eventTemplate.tags.push(tag);
+		}
+		const relays: string[] = Object.entries(relaysToUse)
+			.filter((r) => r[1].write)
+			.map((r) => r[0]);
+		const options: Partial<RxNostrSendOptions> | undefined =
+			relays.length > 0 ? { on: { relays } } : undefined;
+		const eventToSend = await window.nostr.signEvent(eventTemplate);
+		rxNostr.send(eventToSend, options);
+	};
 </script>
 
 <svelte:head>
@@ -445,6 +506,14 @@
 				{/if}
 			</tbody>
 		</table>
+		<button
+			type="button"
+			disabled={relaysToUse === undefined ||
+				!Object.entries(relaysToUse)
+					.map((r) => r[0])
+					.some((r) => deadRelays.includes(r))}
+			onclick={removeDeadRelays}>Remove dead relays</button
+		>
 	</details>
 	<h2>🚫Blocked Relays (kind:10006)</h2>
 	<details>
