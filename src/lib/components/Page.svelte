@@ -100,6 +100,8 @@
 		savedRelaysRead = [];
 		userPubkeysWrite = [];
 		userPubkeysRead = [];
+		blockedRelays = [];
+		deadRelays = [];
 		const userPubkeysWriteMap = new Map<string, Set<string>>();
 		const userPubkeysReadMap = new Map<string, Set<string>>();
 		let dr;
