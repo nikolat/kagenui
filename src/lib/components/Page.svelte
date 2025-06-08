@@ -441,6 +441,48 @@
 		const eventToSend = await window.nostr.signEvent(eventTemplate);
 		rxNostr.send(eventToSend, options);
 	};
+
+	const addBlockRelays = async (): Promise<void> => {
+		if (relaysToUse === undefined || window.nostr === undefined) {
+			return;
+		}
+		const blockedRelaysForEvent = new Set<string>(blockedRelays);
+		for (const relay of deadRelays) {
+			blockedRelaysForEvent.add(relay);
+		}
+		const eventTemplate: EventTemplate = {
+			kind: 10006,
+			tags: Array.from(blockedRelaysForEvent).map((relay) => ['relay', relay]),
+			content: '',
+			created_at: now()
+		};
+		const relays: string[] = Object.entries(relaysToUse)
+			.filter((r) => r[1].write)
+			.map((r) => r[0]);
+		const options: Partial<RxNostrSendOptions> | undefined =
+			relays.length > 0 ? { on: { relays } } : undefined;
+		const eventToSend = await window.nostr.signEvent(eventTemplate);
+		rxNostr.send(eventToSend, options);
+	};
+
+	const clearBlockList = async (): Promise<void> => {
+		if (relaysToUse === undefined || window.nostr === undefined) {
+			return;
+		}
+		const eventTemplate: EventTemplate = {
+			kind: 10006,
+			tags: [],
+			content: '',
+			created_at: now()
+		};
+		const relays: string[] = Object.entries(relaysToUse)
+			.filter((r) => r[1].write)
+			.map((r) => r[0]);
+		const options: Partial<RxNostrSendOptions> | undefined =
+			relays.length > 0 ? { on: { relays } } : undefined;
+		const eventToSend = await window.nostr.signEvent(eventTemplate);
+		rxNostr.send(eventToSend, options);
+	};
 </script>
 
 <svelte:head>
@@ -453,30 +495,6 @@
 	<button onclick={getNpubWithNIP07}>get public key from extension</button>
 	<input id="npub" type="text" placeholder="npub1... or nprofile1..." bind:value={npub} />
 	<button onclick={getRelays} disabled={!npub || isGettingEvents}>show relays of followees</button>
-	<dl>
-		<dt>Type</dt>
-		<dd>
-			<label>
-				<input type="radio" bind:group={relayType} name="relaytype" value="Write" />
-				Write
-			</label>
-			<label>
-				<input type="radio" bind:group={relayType} name="relaytype" value="Read" />
-				Read
-			</label>
-		</dd>
-		<dt>Group</dt>
-		<dd>
-			<label>
-				<input type="radio" bind:group={groupType} name="grouptype" value="All" />
-				All
-			</label>
-			<label>
-				<input type="radio" bind:group={groupType} name="grouptype" value="Required" />
-				Required
-			</label>
-		</dd>
-	</dl>
 	<p>{message}</p>
 	<h2>📶Relay List Metadata (kind:10002)</h2>
 	<details>
@@ -524,7 +542,46 @@
 				<li><span title={state}>{getMark(state)}</span>{relay}</li>
 			{/each}
 		</ul>
+		<button
+			type="button"
+			disabled={relaysToUse === undefined || deadRelays.every((r) => blockedRelays.includes(r))}
+			onclick={addBlockRelays}>Add dead relays</button
+		>
+		<button type="button" disabled={blockedRelays.length === 0} onclick={clearBlockList}
+			>Clear block list</button
+		>
+		<h3>Relays to be added to the block list</h3>
+		<ul class="block-to-add">
+			{#each deadRelays.filter((relay) => relay.startsWith('wss://') && !blockedRelays.includes(relay)) as relay (relay)}
+				{@const state = relayState.find((rs) => rs[0] === relay)?.at(1) ?? ''}
+				<li><span title={state}>{getMark(state)}</span>{relay}</li>
+			{/each}
+		</ul>
 	</details>
+	<dl>
+		<dt>Type</dt>
+		<dd>
+			<label>
+				<input type="radio" bind:group={relayType} name="relaytype" value="Write" />
+				Write
+			</label>
+			<label>
+				<input type="radio" bind:group={relayType} name="relaytype" value="Read" />
+				Read
+			</label>
+		</dd>
+		<dt>Group</dt>
+		<dd>
+			<label>
+				<input type="radio" bind:group={groupType} name="grouptype" value="All" />
+				All
+			</label>
+			<label>
+				<input type="radio" bind:group={groupType} name="grouptype" value="Required" />
+				Required
+			</label>
+		</dd>
+	</dl>
 	<dl>
 		{#each filteredRelays as relay (relay)}
 			{@const pubkeys = filteredPubkeys.filter(([r]) => r === relay).at(0)}
