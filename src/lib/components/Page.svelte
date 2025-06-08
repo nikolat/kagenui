@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { NostrEvent } from 'nostr-tools/pure';
 	import { normalizeURL } from 'nostr-tools/utils';
+	import type { RelayRecord } from 'nostr-tools/relay';
 	import * as nip19 from 'nostr-tools/nip19';
 	import {
 		createRxBackwardReq,
@@ -37,6 +38,7 @@
 	let message = $state('');
 	let relayType: RelayType = $state('Write');
 	let groupType: GroupType = $state('All');
+	let relaysToUse: RelayRecord | undefined = $state();
 
 	const getNpubWithNIP07 = async () => {
 		const nostr = window.nostr;
@@ -128,11 +130,16 @@
 		const ev10002Map = new Map<string, NostrEvent>();
 		const next1 = (value: EventPacket): void => {
 			ev10002 = value.event;
+			relaysToUse = getRelaysToUseFromKind10002Event(ev10002);
 		};
 		const next2 = (value: EventPacket): void => {
 			switch (value.event.kind) {
 				case 3:
 					ev3 = value.event;
+					break;
+				case 10002:
+					ev10002 = value.event;
+					relaysToUse = getRelaysToUseFromKind10002Event(ev10002);
 					break;
 				case 10006:
 					blockedRelays = value.event.tags
@@ -175,7 +182,7 @@
 			console.info('relays:', relays);
 			message = `${relays.length} relays`;
 			const filter: LazyFilter = {
-				kinds: [3, 10006],
+				kinds: [3, 10002, 10006],
 				authors: [targetPubkey],
 				until: now
 			};
@@ -269,6 +276,31 @@
 			until: now
 		};
 		fetchEvents(rxNostr, next1, complete1, filter);
+	};
+
+	const getRelaysToUseFromKind10002Event = (event: NostrEvent): RelayRecord => {
+		const newRelays: RelayRecord = {};
+		for (const tag of event?.tags.filter(
+			(tag) => tag.length >= 2 && tag[0] === 'r' && URL.canParse(tag[1])
+		) ?? []) {
+			const url: string = normalizeURL(tag[1]);
+			const isRead: boolean = tag.length === 2 || tag[2] === 'read';
+			const isWrite: boolean = tag.length === 2 || tag[2] === 'write';
+			if (newRelays[url] === undefined) {
+				newRelays[url] = {
+					read: isRead,
+					write: isWrite
+				};
+			} else {
+				if (isRead) {
+					newRelays[url].read = true;
+				}
+				if (isWrite) {
+					newRelays[url].write = true;
+				}
+			}
+		}
+		return newRelays;
 	};
 
 	onMount(() => {
@@ -385,6 +417,45 @@
 		</dd>
 	</dl>
 	<p>{message}</p>
+	<h2>📶Relay List Metadata (kind:10002)</h2>
+	<details>
+		<summary>Relay List Metadata</summary>
+		<table>
+			<tbody>
+				<tr>
+					<th class="mark"></th>
+					<th class="url">relay</th>
+					<th class="read">r</th>
+					<th class="write">w</th>
+				</tr>
+				{#if relaysToUse !== undefined}
+					{#each Object.entries(relaysToUse) as relay (relay[0])}
+						{@const state = relayState.find((rs) => rs[0] === relay[0])?.at(1) ?? ''}
+						<tr>
+							<td class="mark"><span title={state}>{getMark(state)}</span></td>
+							<td class="url">{relay[0]}</td>
+							<td class="read"
+								><input type="checkbox" checked={relay[1].read} name="read" disabled /></td
+							>
+							<td class="write"
+								><input type="checkbox" checked={relay[1].write} name="write" disabled /></td
+							>
+						</tr>
+					{/each}
+				{/if}
+			</tbody>
+		</table>
+	</details>
+	<h2>🚫Blocked Relays (kind:10006)</h2>
+	<details>
+		<summary>Blocked Relays</summary>
+		<ul class="block">
+			{#each blockedRelays as relay (relay)}
+				{@const state = relayState.find((rs) => rs[0] === relay)?.at(1) ?? ''}
+				<li><span title={state}>{getMark(state)}</span>{relay}</li>
+			{/each}
+		</ul>
+	</details>
 	<dl>
 		{#each filteredRelays as relay (relay)}
 			{@const pubkeys = filteredPubkeys.filter(([r]) => r === relay).at(0)}
@@ -420,6 +491,14 @@
 <style>
 	#npub {
 		width: 100%;
+	}
+	summary {
+		width: 100%;
+	}
+	.mark,
+	.read,
+	.write {
+		width: 2em;
 	}
 	img {
 		border-radius: 10%;
