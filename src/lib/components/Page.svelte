@@ -360,7 +360,7 @@
 				userPubkeysMap.set(up[0], new Set<string>(up[1]));
 			}
 			for (const relay of savedRelays.filter(
-				(r) => !blockedRelays.includes(r) && !deadRelays.includes(r)
+				(r) => r.startsWith('wss://') && !blockedRelays.includes(r) && !deadRelays.includes(r)
 			)) {
 				const usersUsing: Set<string> = userPubkeysMap.get(relay) ?? new Set<string>();
 				if (Array.from(usersUsing).some((p) => allPubkeySet.has(p))) {
