@@ -80,7 +80,7 @@
 		initialDelay: 1000,
 		polite: true
 	};
-	const rxNostr = createRxNostr({ verifier, retry, authenticator: 'auto' });
+	const rxNostr = createRxNostr({ verifier, retry });
 	rxNostr.setDefaultRelays(indexerRelays);
 	rxNostr.createConnectionStateObservable().subscribe(callbackConnectionState);
 	rxNostr
