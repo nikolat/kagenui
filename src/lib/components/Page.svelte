@@ -7,8 +7,10 @@
 		createRxBackwardReq,
 		createRxForwardReq,
 		createRxNostr,
+		filterByType,
 		latestEach,
 		now,
+		type AuthPacket,
 		type ConnectionStatePacket,
 		type EventPacket,
 		type LazyFilter,
@@ -36,6 +38,7 @@
 	let profileMap = $state(new Map<string, Profile>());
 	let blockedRelays: string[] = $state([]);
 	let deadRelays: string[] = $state([]);
+	let authRelays: string[] = $state([]);
 	let isGettingEvents = $state(false);
 	let message = $state('');
 	let relayType: RelayType = $state('Write');
@@ -80,6 +83,21 @@
 	const rxNostr = createRxNostr({ verifier, retry, authenticator: 'auto' });
 	rxNostr.setDefaultRelays(indexerRelays);
 	rxNostr.createConnectionStateObservable().subscribe(callbackConnectionState);
+	rxNostr
+		.createAllMessageObservable()
+		.pipe(filterByType('AUTH'))
+		.subscribe(
+			(
+				e: AuthPacket & {
+					type: 'AUTH';
+				}
+			) => {
+				const relay = normalizeURL(e.from);
+				if (!authRelays.includes(relay)) {
+					authRelays.push(relay);
+				}
+			}
+		);
 
 	const fetchEvents = (
 		rxNostr: RxNostr,
@@ -121,6 +139,7 @@
 		userPubkeysRead = [];
 		blockedRelays = [];
 		deadRelays = [];
+		authRelays = [];
 		const userPubkeysWriteMap = new Map<string, Set<string>>();
 		const userPubkeysReadMap = new Map<string, Set<string>>();
 		let dr;
@@ -442,12 +461,12 @@
 		rxNostr.send(eventToSend, options);
 	};
 
-	const addBlockRelays = async (): Promise<void> => {
+	const addRelaysToBlockLost = async (relaysToAdd: string[]): Promise<void> => {
 		if (relaysToUse === undefined || window.nostr === undefined) {
 			return;
 		}
 		const blockedRelaysForEvent = new Set<string>(blockedRelays);
-		for (const relay of deadRelays) {
+		for (const relay of relaysToAdd) {
 			blockedRelaysForEvent.add(relay);
 		}
 		const eventTemplate: EventTemplate = {
@@ -502,16 +521,25 @@
 		<table>
 			<tbody>
 				<tr>
-					<th class="mark"></th>
-					<th class="url">relay</th>
-					<th class="read">r</th>
-					<th class="write">w</th>
+					<th class="mark"><span title="relay status">📊</span></th>
+					<th class="auth"><span title="auth required">✅</span></th>
+					<th class="block"><span title="blocked by you">🚫</span></th>
+					<th class="url">Relay URL</th>
+					<th class="read"><span title="inbox relay">📥</span></th>
+					<th class="write"><span title="outbox relay">📝</span></th>
 				</tr>
 				{#if relaysToUse !== undefined}
 					{#each Object.entries(relaysToUse) as relay (relay[0])}
 						{@const state = relayState.find((rs) => rs[0] === relay[0])?.at(1) ?? ''}
 						<tr>
 							<td class="mark"><span title={state}>{getMark(state)}</span></td>
+							<td class="auth"
+								>{#if authRelays.includes(relay[0])}<span title="auth required">✅</span>{/if}</td
+							>
+							<td class="block"
+								>{#if blockedRelays.includes(relay[0])}<span title="blocked by you">🚫</span
+									>{/if}</td
+							>
 							<td class="url">{relay[0]}</td>
 							<td class="read"
 								><input type="checkbox" checked={relay[1].read} name="read" disabled /></td
@@ -536,25 +564,43 @@
 	<h2>🚫Blocked Relays (kind:10006)</h2>
 	<details>
 		<summary>Blocked Relays</summary>
-		<ul class="block">
+		<h3>Relays blocked</h3>
+		<button type="button" disabled={blockedRelays.length === 0} onclick={clearBlockList}
+			>Clear block list</button
+		>
+		<ul class="blocked-relays">
 			{#each blockedRelays as relay (relay)}
+				{@const state = relayState.find((rs) => rs[0] === relay)?.at(1) ?? ''}
+				<li>
+					<span title={state}>{getMark(state)}</span>
+					{#if authRelays.includes(relay)}<span title="auth required">✅</span>{/if}
+					{relay}
+				</li>
+			{/each}
+		</ul>
+		<h3>Relays without response</h3>
+		<button
+			type="button"
+			disabled={relaysToUse === undefined || deadRelays.every((r) => blockedRelays.includes(r))}
+			onclick={() => addRelaysToBlockLost(deadRelays)}>Add to the block list</button
+		>
+		<ul class="dead-relays">
+			{#each deadRelays.filter((relay) => relay.startsWith('wss://') && !blockedRelays.includes(relay)) as relay (relay)}
 				{@const state = relayState.find((rs) => rs[0] === relay)?.at(1) ?? ''}
 				<li><span title={state}>{getMark(state)}</span>{relay}</li>
 			{/each}
 		</ul>
+		<h3>Relays for which authentication is requested</h3>
 		<button
 			type="button"
-			disabled={relaysToUse === undefined || deadRelays.every((r) => blockedRelays.includes(r))}
-			onclick={addBlockRelays}>Add dead relays</button
+			disabled={relaysToUse === undefined || authRelays.every((r) => blockedRelays.includes(r))}
+			onclick={() => {
+				addRelaysToBlockLost(authRelays);
+			}}>Add to the block list</button
 		>
-		<button type="button" disabled={blockedRelays.length === 0} onclick={clearBlockList}
-			>Clear block list</button
-		>
-		<h3>Relays to be added to the block list</h3>
-		<ul class="block-to-add">
-			{#each deadRelays.filter((relay) => relay.startsWith('wss://') && !blockedRelays.includes(relay)) as relay (relay)}
-				{@const state = relayState.find((rs) => rs[0] === relay)?.at(1) ?? ''}
-				<li><span title={state}>{getMark(state)}</span>{relay}</li>
+		<ul class="auth-relays">
+			{#each authRelays.filter((relay) => relay.startsWith('wss://') && !blockedRelays.includes(relay)) as relay (relay)}
+				<li><span title="auth required">✅</span>{relay}</li>
 			{/each}
 		</ul>
 	</details>
@@ -589,6 +635,7 @@
 			<dt>
 				<span title={state}>{getMark(state)}</span>
 				{#if blockedRelays.includes(relay)}<span title="blocked by you">🚫</span>{/if}
+				{#if authRelays.includes(relay)}<span title="auth required">✅</span>{/if}
 				{relay}
 			</dt>
 			<dd>
@@ -621,10 +668,21 @@
 	summary {
 		width: 100%;
 	}
+	th {
+		text-align: center;
+	}
+	td:not(.url) {
+		text-align: center;
+	}
 	.mark,
+	.auth,
+	.block,
 	.read,
 	.write {
 		width: 2em;
+	}
+	li {
+		list-style: none;
 	}
 	img {
 		border-radius: 10%;
