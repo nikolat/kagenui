@@ -464,9 +464,9 @@
 		const relaysNew: string[] = Object.entries(relaysToUseNew)
 			.filter((r) => r[1].write)
 			.map((r) => r[0]);
-		const relays = Array.from(
-			new Set<string>([...relaysOld, ...relaysNew, ...indexerRelays])
-		).filter((relay) => !blockedRelays.includes(relay));
+		const relays = Array.from(new Set<string>([...relaysOld, ...relaysNew])).filter(
+			(relay) => !blockedRelays.includes(relay)
+		);
 		const options: Partial<RxNostrSendOptions> | undefined =
 			relays.length > 0 ? { on: { relays } } : undefined;
 		sendEvent(eventToSend, options);
