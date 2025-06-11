@@ -444,7 +444,7 @@
 			if (deadRelays.includes(r[0])) {
 				continue;
 			}
-			const tag = ['relay', r[0]];
+			const tag = ['r', r[0]];
 			if (r[1].read && !r[1].write) {
 				tag.push('read');
 			} else if (!r[1].read && r[1].write) {
