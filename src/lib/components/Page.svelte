@@ -3,6 +3,7 @@
 	import { normalizeURL } from 'nostr-tools/utils';
 	import type { RelayRecord } from 'nostr-tools/relay';
 	import * as nip19 from 'nostr-tools/nip19';
+	import type { Subscription } from 'rxjs';
 	import {
 		createRxBackwardReq,
 		createRxForwardReq,
@@ -30,6 +31,9 @@
 	};
 	type RelayType = 'Write' | 'Read';
 	type GroupType = 'All' | 'Required';
+	let rxNostr: RxNostr;
+	let rxNostrPublishOnly: RxNostr;
+	let sub: Subscription | undefined;
 	let npub: string = $state('');
 	let savedRelaysWrite: string[] = $state([]);
 	let savedRelaysRead: string[] = $state([]);
@@ -73,31 +77,6 @@
 			}
 		}
 	};
-
-	const retry: RetryConfig = {
-		strategy: 'exponential',
-		maxCount: 3,
-		initialDelay: 1000,
-		polite: true
-	};
-	const rxNostr = createRxNostr({ verifier, retry });
-	rxNostr.setDefaultRelays(indexerRelays);
-	rxNostr.createConnectionStateObservable().subscribe(callbackConnectionState);
-	rxNostr
-		.createAllMessageObservable()
-		.pipe(filterByType('AUTH'))
-		.subscribe(
-			(
-				e: AuthPacket & {
-					type: 'AUTH';
-				}
-			) => {
-				const relay = normalizeURL(e.from);
-				if (!authRelays.includes(relay)) {
-					authRelays.push(relay);
-				}
-			}
-		);
 
 	const fetchEvents = (
 		rxNostr: RxNostr,
@@ -361,6 +340,31 @@
 				npub = '';
 			}
 		});
+		const retry: RetryConfig = {
+			strategy: 'exponential',
+			maxCount: 3,
+			initialDelay: 1000,
+			polite: true
+		};
+		rxNostr = createRxNostr({ verifier, retry });
+		rxNostr.setDefaultRelays(indexerRelays);
+		rxNostr.createConnectionStateObservable().subscribe(callbackConnectionState);
+		rxNostr
+			.createAllMessageObservable()
+			.pipe(filterByType('AUTH'))
+			.subscribe(
+				(
+					e: AuthPacket & {
+						type: 'AUTH';
+					}
+				) => {
+					const relay = normalizeURL(e.from);
+					if (!authRelays.includes(relay)) {
+						authRelays.push(relay);
+					}
+				}
+			);
+		rxNostrPublishOnly = createRxNostr({ verifier, authenticator: 'auto' });
 	});
 
 	const savedRelays: string[] = $derived(
@@ -452,13 +456,20 @@
 			}
 			eventTemplate.tags.push(tag);
 		}
-		const relays: string[] = Object.entries(relaysToUse)
+		const eventToSend = await window.nostr.signEvent(eventTemplate);
+		const relaysToUseNew = getRelaysToUseFromKind10002Event(eventToSend);
+		const relaysOld: string[] = Object.entries(relaysToUse)
 			.filter((r) => r[1].write)
 			.map((r) => r[0]);
+		const relaysNew: string[] = Object.entries(relaysToUseNew)
+			.filter((r) => r[1].write)
+			.map((r) => r[0]);
+		const relays = Array.from(
+			new Set<string>([...relaysOld, ...relaysNew, ...indexerRelays])
+		).filter((relay) => !blockedRelays.includes(relay));
 		const options: Partial<RxNostrSendOptions> | undefined =
 			relays.length > 0 ? { on: { relays } } : undefined;
-		const eventToSend = await window.nostr.signEvent(eventTemplate);
-		rxNostr.send(eventToSend, options);
+		sendEvent(eventToSend, options);
 	};
 
 	const addRelaysToBlockLost = async (relaysToAdd: string[]): Promise<void> => {
@@ -477,11 +488,12 @@
 		};
 		const relays: string[] = Object.entries(relaysToUse)
 			.filter((r) => r[1].write)
-			.map((r) => r[0]);
+			.map((r) => r[0])
+			.filter((relay) => !blockedRelays.includes(relay));
 		const options: Partial<RxNostrSendOptions> | undefined =
 			relays.length > 0 ? { on: { relays } } : undefined;
 		const eventToSend = await window.nostr.signEvent(eventTemplate);
-		rxNostr.send(eventToSend, options);
+		sendEvent(eventToSend, options);
 	};
 
 	const clearBlockList = async (): Promise<void> => {
@@ -500,7 +512,16 @@
 		const options: Partial<RxNostrSendOptions> | undefined =
 			relays.length > 0 ? { on: { relays } } : undefined;
 		const eventToSend = await window.nostr.signEvent(eventTemplate);
-		rxNostr.send(eventToSend, options);
+		sendEvent(eventToSend, options);
+	};
+
+	const sendEvent = (eventToSend: NostrEvent, options?: Partial<RxNostrSendOptions>): void => {
+		sub?.unsubscribe();
+		sub = rxNostrPublishOnly.send(eventToSend, options).subscribe((packet) => {
+			const relay = normalizeURL(packet.from);
+			const mark = packet.ok ? '🟢' : '🔴';
+			console.info(`${mark}${relay}`);
+		});
 	};
 </script>
 
