@@ -56,7 +56,7 @@
 
 	const relayStateMap: Map<string, string> = new Map<string, string>();
 	let relayState: [string, string][] = $state([]);
-	let deadRelays: string[] = $derived(
+	const deadRelays: string[] = $derived(
 		relayState.filter((rs) => ['error', 'rejected'].includes(rs[1])).map((rs) => rs[0])
 	);
 	const callbackConnectionState = (packet: ConnectionStatePacket) => {
@@ -116,7 +116,7 @@
 		userPubkeysWrite = [];
 		userPubkeysRead = [];
 		blockedRelays = [];
-		deadRelays = [];
+		relayState = [];
 		authRelays = [];
 		const userPubkeysWriteMap = new Map<string, Set<string>>();
 		const userPubkeysReadMap = new Map<string, Set<string>>();
