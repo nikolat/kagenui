@@ -22,6 +22,12 @@
 	} from 'rx-nostr';
 	import { verifier } from '@rx-nostr/crypto';
 	import { indexerRelays, getRoboHashURL, linkGitHub, linkto, profileRelays } from '$lib/config';
+	import {
+		getMark,
+		getPubkeyFromNpub,
+		getRelaysToUseFromKind10002Event,
+		getRequiredPubkysAndRelays
+	} from '$lib/utils';
 	import { onMount } from 'svelte';
 
 	type Profile = {
@@ -121,63 +127,29 @@
 		authRelays = [];
 		const userPubkeysWriteMap = new Map<string, Set<string>>();
 		const userPubkeysReadMap = new Map<string, Set<string>>();
-		let dr;
-		try {
-			dr = nip19.decode(npub);
-		} catch (error) {
-			console.error(error);
+		const targetPubkey: string | null = getPubkeyFromNpub(npub);
+		if (targetPubkey === null) {
 			return;
 		}
-		let pubkey: string;
-		if (dr.type === 'npub') {
-			pubkey = dr.data;
-		} else if (dr.type === 'nprofile') {
-			pubkey = dr.data.pubkey;
-		} else {
-			console.error(`${npub} is not npub/nprofile`);
-			return;
-		}
-		const targetPubkey = pubkey;
 		isGettingEvents = true;
 		message = 'getting relays...';
 		let ev10002: NostrEvent | undefined;
 		let ev3: NostrEvent | undefined;
 		const ev10002Map = new Map<string, NostrEvent>();
+		//自身のリレーリストを取得
+		const firstFetch = (): void => {
+			const filter: LazyFilter = {
+				kinds: [10002],
+				authors: [targetPubkey],
+				until: now
+			};
+			fetchEvents(rxNostr, next1, complete1, filter);
+		};
 		const next1 = (value: EventPacket): void => {
 			ev10002 = value.event;
 			relaysToUse = getRelaysToUseFromKind10002Event(ev10002);
 		};
-		const next2 = (value: EventPacket): void => {
-			switch (value.event.kind) {
-				case 3:
-					ev3 = value.event;
-					break;
-				case 10002:
-					ev10002 = value.event;
-					relaysToUse = getRelaysToUseFromKind10002Event(ev10002);
-					break;
-				case 10006:
-					blockedRelays = value.event.tags
-						.filter((tag) => tag.length >= 2 && tag[0] === 'relay' && URL.canParse(tag[1]))
-						.map((tag) => tag[1]);
-					break;
-				default:
-					break;
-			}
-		};
-		const next3 = (value: EventPacket): void => {
-			ev10002Map.set(value.event.pubkey, value.event);
-		};
-		const next4 = (value: EventPacket): void => {
-			let profile;
-			try {
-				profile = JSON.parse(value.event.content);
-			} catch (error) {
-				console.warn(error);
-				return;
-			}
-			profileMap.set(value.event.pubkey, profile);
-		};
+		//自身のフォローリスト・リレーリスト・ブロックリストを取得
 		const complete1 = (): void => {
 			if (ev10002 === undefined) {
 				message = 'kind:10002 event does not exist';
@@ -203,6 +175,25 @@
 			};
 			fetchEvents(rxNostr, next2, complete2, filter, { relays });
 		};
+		const next2 = (value: EventPacket): void => {
+			switch (value.event.kind) {
+				case 3:
+					ev3 = value.event;
+					break;
+				case 10002:
+					ev10002 = value.event;
+					relaysToUse = getRelaysToUseFromKind10002Event(ev10002);
+					break;
+				case 10006:
+					blockedRelays = value.event.tags
+						.filter((tag) => tag.length >= 2 && tag[0] === 'relay' && URL.canParse(tag[1]))
+						.map((tag) => tag[1]);
+					break;
+				default:
+					break;
+			}
+		};
+		//フォローイーのリレーリストを取得
 		const complete2 = (): void => {
 			if (ev3 === undefined) {
 				message = 'kind:3 event does not exist';
@@ -222,6 +213,11 @@
 			};
 			fetchEvents(rxNostr, next3, complete3, filter);
 		};
+		const next3 = (value: EventPacket): void => {
+			ev10002Map.set(value.event.pubkey, value.event);
+		};
+		//フォローイーのプロフィールを取得(アイコン表示のため)
+		//同時にフォローイーのリレーリストすべてにテキトーなREQを投げて疎通確認
 		const complete3 = (): void => {
 			for (const [pubkey, event] of ev10002Map) {
 				for (const tag of event.tags.filter(
@@ -265,6 +261,17 @@
 				{ relays: relaysAll }
 			);
 		};
+		const next4 = (value: EventPacket): void => {
+			let profile;
+			try {
+				profile = JSON.parse(value.event.content);
+			} catch (error) {
+				console.warn(error);
+				return;
+			}
+			profileMap.set(value.event.pubkey, profile);
+		};
+		//完了 引き続き自身のフォローリスト・リレーリスト・ブロックリストを取得
 		const complete4 = (): void => {
 			const userPubkeysWriteBase: [string, string[]][] = [];
 			const userPubkeysReadBase: [string, string[]][] = [];
@@ -298,37 +305,7 @@
 				.map((r) => r[0]);
 			fetchFoward(rxNostr, next2, () => {}, filter, { relays });
 		};
-		const filter: LazyFilter = {
-			kinds: [10002],
-			authors: [targetPubkey],
-			until: now
-		};
-		fetchEvents(rxNostr, next1, complete1, filter);
-	};
-
-	const getRelaysToUseFromKind10002Event = (event: NostrEvent): RelayRecord => {
-		const newRelays: RelayRecord = {};
-		for (const tag of event?.tags.filter(
-			(tag) => tag.length >= 2 && tag[0] === 'r' && URL.canParse(tag[1])
-		) ?? []) {
-			const url: string = normalizeURL(tag[1]);
-			const isRead: boolean = tag.length === 2 || tag[2] === 'read';
-			const isWrite: boolean = tag.length === 2 || tag[2] === 'write';
-			if (newRelays[url] === undefined) {
-				newRelays[url] = {
-					read: isRead,
-					write: isWrite
-				};
-			} else {
-				if (isRead) {
-					newRelays[url].read = true;
-				}
-				if (isWrite) {
-					newRelays[url].write = true;
-				}
-			}
-		}
-		return newRelays;
+		firstFetch();
 	};
 
 	onMount(() => {
@@ -374,65 +351,14 @@
 		relayType === 'Write' ? userPubkeysWrite : userPubkeysRead
 	);
 
-	const [requiredUserPubkeys, requiredRelays]: [[string, string[]][], string[]] = $derived.by(
-		() => {
-			const relaySet: Set<string> = new Set<string>();
-			const allPubkeySet: Set<string> = new Set<string>(userPubkeys.map((e) => e[1]).flat());
-			const userPubkeysMap: Map<string, Set<string>> = new Map<string, Set<string>>();
-			for (const up of userPubkeys) {
-				userPubkeysMap.set(up[0], new Set<string>(up[1]));
-			}
-			for (const relay of savedRelays.filter(
-				(r) => r.startsWith('wss://') && !blockedRelays.includes(r) && !deadRelays.includes(r)
-			)) {
-				const usersUsing: Set<string> = userPubkeysMap.get(relay) ?? new Set<string>();
-				if (Array.from(usersUsing).some((p) => allPubkeySet.has(p))) {
-					relaySet.add(relay);
-					userPubkeysMap.set(
-						relay,
-						new Set<string>(Array.from(usersUsing).filter((p) => allPubkeySet.has(p)))
-					);
-					for (const p of usersUsing) {
-						allPubkeySet.delete(p);
-					}
-				}
-			}
-			const r: [string, string[]][] = [];
-			for (const [k, v] of userPubkeysMap) {
-				r.push([k, Array.from(v)]);
-			}
-			return [r, Array.from(relaySet)];
-		}
+	const [requiredUserPubkeys, requiredRelays]: [[string, string[]][], string[]] = $derived(
+		getRequiredPubkysAndRelays(userPubkeys, savedRelays, blockedRelays, deadRelays)
 	);
 
 	const filteredRelays: string[] = $derived(groupType === 'All' ? savedRelays : requiredRelays);
 	const filteredPubkeys: [string, string[]][] = $derived(
 		groupType === 'All' ? userPubkeys : requiredUserPubkeys
 	);
-
-	const getMark = (state: string): string => {
-		let mark: string;
-		switch (state) {
-			case 'connected':
-				mark = '🟢';
-				break;
-			case 'dormant':
-				mark = '🔵';
-				break;
-			case 'error':
-			case 'rejected':
-				mark = '🔴';
-				break;
-			case 'connecting':
-			case 'retrying':
-				mark = '🟡';
-				break;
-			default:
-				mark = '🟣';
-				break;
-		}
-		return mark;
-	};
 
 	const removeDeadRelays = async (): Promise<void> => {
 		if (relaysToUse === undefined || window.nostr === undefined) {
