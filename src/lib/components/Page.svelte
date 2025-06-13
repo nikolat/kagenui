@@ -47,13 +47,23 @@
 	let userPubkeysRead: [string, string[]][] = $state([]);
 	let profileMap = $state(new Map<string, Profile>());
 	let blockedRelays: string[] = $state([]);
-	let deadRelays: string[] = $state([]);
 	let authRelays: string[] = $state([]);
 	let isGettingEvents = $state(false);
 	let message = $state('');
 	let relayType: RelayType = $state('Write');
 	let groupType: GroupType = $state('All');
 	let relaysToUse: RelayRecord | undefined = $state();
+
+	const relayStateMap: Map<string, string> = new Map<string, string>();
+	let relayState: [string, string][] = $state([]);
+	let deadRelays: string[] = $derived(
+		relayState.filter((rs) => ['error', 'rejected'].includes(rs[1])).map((rs) => rs[0])
+	);
+	const callbackConnectionState = (packet: ConnectionStatePacket) => {
+		const relay: string = normalizeURL(packet.from);
+		relayStateMap.set(relay, packet.state);
+		relayState = Array.from(relayStateMap.entries());
+	};
 
 	const getNpubWithNIP07 = async () => {
 		const nostr = window.nostr;
@@ -63,23 +73,6 @@
 				npub = nip19.npubEncode(pubkey);
 			} catch (error) {
 				console.error(error);
-			}
-		}
-	};
-
-	const relayStateMap: Map<string, string> = new Map<string, string>();
-	let relayState: [string, string][] = $state([]);
-	const callbackConnectionState = (packet: ConnectionStatePacket) => {
-		const relay: string = normalizeURL(packet.from);
-		relayStateMap.set(relay, packet.state);
-		relayState = Array.from(relayStateMap.entries());
-		if (['error', 'rejected'].includes(packet.state)) {
-			if (!deadRelays.includes(relay)) {
-				deadRelays.push(relay);
-			}
-		} else {
-			if (deadRelays.includes(relay)) {
-				deadRelays = deadRelays.filter((r) => r !== relay);
 			}
 		}
 	};
