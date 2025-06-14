@@ -110,14 +110,44 @@
 		rxReq.emit(filter);
 	};
 
-	const getRelays = async () => {
+	const init = (): void => {
 		savedRelaysWrite = [];
 		savedRelaysRead = [];
 		userPubkeysWrite = [];
 		userPubkeysRead = [];
 		blockedRelays = [];
+		relayStateMap.clear();
 		relayState = [];
 		authRelays = [];
+		const retry: RetryConfig = {
+			strategy: 'exponential',
+			maxCount: 3,
+			initialDelay: 1000,
+			polite: true
+		};
+		rxNostr?.dispose();
+		rxNostr = createRxNostr({ verifier, retry });
+		rxNostr.setDefaultRelays(indexerRelays);
+		rxNostr.createConnectionStateObservable().subscribe(callbackConnectionState);
+		rxNostr
+			.createAllMessageObservable()
+			.pipe(filterByType('AUTH'))
+			.subscribe(
+				(
+					e: AuthPacket & {
+						type: 'AUTH';
+					}
+				) => {
+					const relay = normalizeURL(e.from);
+					if (!authRelays.includes(relay)) {
+						authRelays.push(relay);
+					}
+				}
+			);
+	};
+
+	const getRelays = async () => {
+		init();
 		const userPubkeysWriteMap = new Map<string, Set<string>>();
 		const userPubkeysReadMap = new Map<string, Set<string>>();
 		const targetPubkey: string | null = getPubkeyFromNpub(npub);
@@ -310,30 +340,6 @@
 				npub = '';
 			}
 		});
-		const retry: RetryConfig = {
-			strategy: 'exponential',
-			maxCount: 3,
-			initialDelay: 1000,
-			polite: true
-		};
-		rxNostr = createRxNostr({ verifier, retry });
-		rxNostr.setDefaultRelays(indexerRelays);
-		rxNostr.createConnectionStateObservable().subscribe(callbackConnectionState);
-		rxNostr
-			.createAllMessageObservable()
-			.pipe(filterByType('AUTH'))
-			.subscribe(
-				(
-					e: AuthPacket & {
-						type: 'AUTH';
-					}
-				) => {
-					const relay = normalizeURL(e.from);
-					if (!authRelays.includes(relay)) {
-						authRelays.push(relay);
-					}
-				}
-			);
 		rxNostrPublishOnly = createRxNostr({ verifier, authenticator: 'auto' });
 	});
 
