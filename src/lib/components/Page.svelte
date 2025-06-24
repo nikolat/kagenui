@@ -27,7 +27,8 @@
 		linkGitHub,
 		linkto,
 		profileRelays,
-		sitename
+		sitename,
+		siteurl
 	} from '$lib/config';
 	import {
 		getMark,
@@ -36,7 +37,6 @@
 		getRequiredPubkysAndRelays
 	} from '$lib/utils';
 	import { onMount } from 'svelte';
-	import { page } from '$app/state';
 
 	type Profile = {
 		name?: string;
@@ -461,11 +461,11 @@
 <svelte:head>
 	<meta property="og:title" content={sitename} />
 	<meta property="og:type" content="website" />
-	<meta property="og:image" content={`${page.url.href}ogp.png`} />
-	<meta property="og:url" content={page.url.href} />
-	<link rel="apple-touch-icon" sizes="180x180" href={`${page.url.href}apple-touch-icon.png`} />
-	<link rel="icon" type="image/png" sizes="16x16" href={`${page.url.href}favicon.png`} />
-	<link rel="manifest" href={`${page.url.href}manifest.json`} />
+	<meta property="og:image" content={`${siteurl}ogp.png`} />
+	<meta property="og:url" content={siteurl} />
+	<link rel="apple-touch-icon" sizes="180x180" href={`${siteurl}apple-touch-icon.png`} />
+	<link rel="icon" type="image/png" sizes="16x16" href={`${siteurl}favicon.png`} />
+	<link rel="manifest" href={`${siteurl}manifest.json`} />
 	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/dark.css" />
 	<title>{sitename}</title>
 </svelte:head>

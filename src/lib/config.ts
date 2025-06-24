@@ -2,6 +2,7 @@ import { npubEncode } from 'nostr-tools/nip19';
 import type { WindowNostr } from 'nostr-tools/nip07';
 
 export const sitename = 'KAGENUI';
+export const siteurl = 'https://nikolat.github.io/kagenui/';
 export const indexerRelays = [
 	'wss://directory.yabu.me/',
 	'wss://purplepag.es/',
