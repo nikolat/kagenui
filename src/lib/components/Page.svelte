@@ -461,11 +461,11 @@
 <svelte:head>
 	<meta property="og:title" content={sitename} />
 	<meta property="og:type" content="website" />
-	<meta property="og:image" content={`${page.url.origin}/ogp.png`} />
+	<meta property="og:image" content={`${page.url.href}ogp.png`} />
 	<meta property="og:url" content={page.url.href} />
-	<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-	<link rel="icon" type="image/png" sizes="16x16" href="/favicon.png" />
-	<link rel="manifest" href="/manifest.json" />
+	<link rel="apple-touch-icon" sizes="180x180" href={`${page.url.href}apple-touch-icon.png`} />
+	<link rel="icon" type="image/png" sizes="16x16" href={`${page.url.href}favicon.png`} />
+	<link rel="manifest" href={`${page.url.href}manifest.json`} />
 	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/dark.css" />
 	<title>{sitename}</title>
 </svelte:head>
