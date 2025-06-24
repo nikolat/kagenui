@@ -465,7 +465,6 @@
 	<meta property="og:url" content={siteurl} />
 	<link rel="apple-touch-icon" sizes="180x180" href={`${siteurl}apple-touch-icon.png`} />
 	<link rel="icon" type="image/png" sizes="16x16" href={`${siteurl}favicon.png`} />
-	<link rel="manifest" href={`${siteurl}manifest.json`} />
 	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/dark.css" />
 	<title>{sitename}</title>
 </svelte:head>
