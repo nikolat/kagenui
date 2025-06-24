@@ -21,7 +21,14 @@
 		type RxNostrUseOptions
 	} from 'rx-nostr';
 	import { verifier } from '@rx-nostr/crypto';
-	import { indexerRelays, getRoboHashURL, linkGitHub, linkto, profileRelays } from '$lib/config';
+	import {
+		indexerRelays,
+		getRoboHashURL,
+		linkGitHub,
+		linkto,
+		profileRelays,
+		sitename
+	} from '$lib/config';
 	import {
 		getMark,
 		getPubkeyFromNpub,
@@ -29,6 +36,7 @@
 		getRequiredPubkysAndRelays
 	} from '$lib/utils';
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 
 	type Profile = {
 		name?: string;
@@ -451,11 +459,18 @@
 </script>
 
 <svelte:head>
+	<meta property="og:title" content={sitename} />
+	<meta property="og:type" content="website" />
+	<meta property="og:image" content={`${page.url.origin}/ogp.png`} />
+	<meta property="og:url" content={page.url.href} />
+	<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+	<link rel="icon" type="image/png" sizes="16x16" href="/favicon.png" />
+	<link rel="manifest" href="/manifest.json" />
 	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/dark.css" />
-	<title>Nostr Relay Trend</title>
+	<title>{sitename}</title>
 </svelte:head>
 
-<header><h1>Nostr Relay Trend</h1></header>
+<header><h1>{sitename}</h1></header>
 <main>
 	<button onclick={getNpubWithNIP07}>get public key from extension</button>
 	<input id="npub" type="text" placeholder="npub1... or nprofile1..." bind:value={npub} />
