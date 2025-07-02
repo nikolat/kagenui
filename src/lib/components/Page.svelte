@@ -340,14 +340,6 @@
 	};
 
 	onMount(() => {
-		document.addEventListener('nlAuth', (e) => {
-			const ce: CustomEvent = e as CustomEvent;
-			if (ce.detail.type === 'login' || ce.detail.type === 'signup') {
-				npub = nip19.npubEncode(ce.detail.pubkey);
-			} else {
-				npub = '';
-			}
-		});
 		rxNostrPublishOnly = createRxNostr({ verifier, authenticator: 'auto' });
 	});
 
