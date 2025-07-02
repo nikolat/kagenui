@@ -3,12 +3,14 @@ import { normalizeURL } from 'nostr-tools/utils';
 import type { RelayRecord } from 'nostr-tools/relay';
 import * as nip19 from 'nostr-tools/nip19';
 
-export const getPubkeyFromNpub = (npub: string): string | null => {
+export const getPubkeyFromNpub = (npub: string, enableLog: boolean = true): string | null => {
 	let dr;
 	try {
 		dr = nip19.decode(npub);
 	} catch (error) {
-		console.error(error);
+		if (enableLog) {
+			console.error(error);
+		}
 		return null;
 	}
 	let pubkey: string;
@@ -17,7 +19,9 @@ export const getPubkeyFromNpub = (npub: string): string | null => {
 	} else if (dr.type === 'nprofile') {
 		pubkey = dr.data.pubkey;
 	} else {
-		console.error(`${npub} is not npub/nprofile`);
+		if (enableLog) {
+			console.error(`${npub} is not npub/nprofile`);
+		}
 		return null;
 	}
 	return pubkey;

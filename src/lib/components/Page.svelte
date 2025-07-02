@@ -49,6 +49,7 @@
 	let rxNostrPublishOnly: RxNostr;
 	let sub: Subscription | undefined;
 	let npub: string = $state('');
+	let prof: Profile | undefined = $state();
 	let savedRelaysWrite: string[] = $state([]);
 	let savedRelaysRead: string[] = $state([]);
 	let userPubkeysWrite: [string, string[]][] = $state([]);
@@ -119,6 +120,7 @@
 	};
 
 	const init = (): void => {
+		prof = undefined;
 		savedRelaysWrite = [];
 		savedRelaysRead = [];
 		userPubkeysWrite = [];
@@ -322,6 +324,7 @@
 
 			isGettingEvents = false;
 			message = 'complete';
+			prof = profileMap.get(targetPubkey);
 
 			if (relaysToUse === undefined) {
 				return;
@@ -477,6 +480,9 @@
 <header><h1>{sitename}</h1></header>
 <main>
 	<button onclick={getNpubWithNIP07}>get public key from extension</button>
+	{#if prof?.picture !== undefined && URL.canParse(prof.picture)}
+		<img class="avator_user" src={prof.picture} alt="avator" />
+	{/if}
 	<input id="npub" type="text" placeholder="npub1... or nprofile1..." bind:value={npub} />
 	<button onclick={getRelays} disabled={!npub || isGettingEvents}>show relays of followees</button>
 	<p>{message}</p>
@@ -652,10 +658,15 @@
 	img {
 		border-radius: 10%;
 	}
+	.avator_user {
+		width: 36px;
+		height: 36px;
+		object-fit: cover;
+		vertical-align: middle;
+	}
 	.avatar_relay {
 		width: 16px;
 		height: 16px;
-		border-radius: 10%;
 		object-fit: cover;
 	}
 	dd {
