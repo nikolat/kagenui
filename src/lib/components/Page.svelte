@@ -341,6 +341,19 @@
 
 	onMount(() => {
 		rxNostrPublishOnly = createRxNostr({ verifier, authenticator: 'auto' });
+		const search = location.search.replace('?', '');
+		const searchParams = new URLSearchParams(search);
+		let runAuto: boolean = false;
+		for (const [k, v] of searchParams) {
+			if (['npub', 'nprofile'].includes(k)) {
+				npub = v;
+			} else if (k === 'run') {
+				runAuto = true;
+			}
+		}
+		if (runAuto && npub.length > 0) {
+			getRelays();
+		}
 	});
 
 	const savedRelays: string[] = $derived(
