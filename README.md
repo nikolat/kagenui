@@ -1,4 +1,4 @@
-# nostr-relay-trend
+# KAGENUI
 
 Nostr relays used by followees.
 
