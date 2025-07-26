@@ -5,6 +5,7 @@
 	import * as nip19 from 'nostr-tools/nip19';
 	import type { Subscription } from 'rxjs';
 	import {
+		completeOnTimeout,
 		createRxBackwardReq,
 		createRxForwardReq,
 		createRxNostr,
@@ -96,7 +97,10 @@
 		const rxReq = createRxBackwardReq();
 		rxNostr
 			.use(rxReq, options)
-			.pipe(latestEach(({ event }) => `${event.kind}:${event.pubkey}`))
+			.pipe(
+				latestEach(({ event }) => `${event.kind}:${event.pubkey}`),
+				completeOnTimeout(1000)
+			)
 			.subscribe({
 				next,
 				complete
