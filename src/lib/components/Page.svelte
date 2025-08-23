@@ -65,7 +65,7 @@
 	let relayType: RelayType = $state('Write');
 	let groupType: GroupType = $state('All');
 	let relaysToUse: RelayRecord | undefined = $state();
-
+	let countFollowees: number = $state(0);
 	const relayStateMap: Map<string, string> = new Map<string, string>();
 	let relayState: [string, string][] = $state([]);
 	const deadRelays: string[] = $derived(
@@ -135,6 +135,7 @@
 		relayStateMap.clear();
 		relayState = [];
 		authRelays = [];
+		countFollowees = 0;
 		const retry: RetryConfig = {
 			strategy: 'exponential',
 			maxCount: 3,
@@ -243,6 +244,7 @@
 			const followingPubkeys = ev3.tags
 				.filter((tag) => tag.length >= 2 && tag[0] === 'p')
 				.map((tag) => tag[1]);
+			countFollowees = followingPubkeys.length;
 			console.log('followees:', followingPubkeys);
 			message = `${followingPubkeys.length} followees`;
 			const filter: LazyFilter = {
@@ -606,6 +608,7 @@
 		</dd>
 	</dl>
 	<ul>
+		<li>Followees: {countFollowees}</li>
 		<li>Total: {filteredRelays.length} Relays</li>
 		{#each ['🟢', '🔵', '🔴', '🟡', '🟣'] as mark (mark)}
 			<li>
