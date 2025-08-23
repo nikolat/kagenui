@@ -560,8 +560,12 @@
 		<h3>Relays without response</h3>
 		<button
 			type="button"
-			disabled={relaysToUse === undefined || deadRelays.every((r) => blockedRelays.includes(r))}
-			onclick={() => addRelaysToBlockLost(deadRelays)}>Add to the block list</button
+			disabled={relaysToUse === undefined ||
+				deadRelays
+					.filter((relay) => relay.startsWith('wss://'))
+					.every((r) => blockedRelays.includes(r))}
+			onclick={() => addRelaysToBlockLost(deadRelays.filter((relay) => relay.startsWith('wss://')))}
+			>Add to the block list</button
 		>
 		<ul class="dead-relays">
 			{#each deadRelays.filter((relay) => relay.startsWith('wss://') && !blockedRelays.includes(relay)) as relay (relay)}
