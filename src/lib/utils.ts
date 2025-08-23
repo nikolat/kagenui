@@ -76,6 +76,50 @@ export const getMark = (state: string): string => {
 	return mark;
 };
 
+export const getStates = (mark: string): string[] | undefined => {
+	let states: string[] | undefined;
+	switch (mark) {
+		case '🟢':
+			states = ['connected'];
+			break;
+		case '🔵':
+			states = ['dormant'];
+			break;
+		case '🔴':
+			states = ['error', 'rejected'];
+			break;
+		case '🟡':
+			states = ['connecting', 'retrying'];
+			break;
+		case '🟣':
+			states = ['initialized', 'waiting-for-retrying', 'terminated'];
+			break;
+		default:
+			break;
+	}
+	return states;
+};
+
+export const getCount = (
+	mark: string,
+	filteredRelays: string[],
+	relayState: [string, string][]
+): number => {
+	const relayStateMap: Map<string, string> = new Map<string, string>(relayState);
+	const states: string[] | undefined = getStates(mark);
+	let filter: (relay: string) => boolean;
+	if (states === undefined) {
+		filter = (relay: string) =>
+			!['connected', 'dormant', 'error', 'rejected', 'connecting', 'retrying'].includes(
+				relayStateMap.get(relay) ?? ''
+			);
+	} else {
+		filter = (relay: string) => states.includes(relayStateMap.get(relay) ?? '');
+	}
+	const count = filteredRelays.filter(filter).length;
+	return count;
+};
+
 export const getRequiredPubkysAndRelays = (
 	userPubkeys: [string, string[]][],
 	savedRelays: string[],

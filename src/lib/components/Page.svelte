@@ -32,10 +32,12 @@
 		siteurl
 	} from '$lib/config';
 	import {
+		getCount,
 		getMark,
 		getPubkeyFromNpub,
 		getRelaysToUseFromKind10002Event,
-		getRequiredPubkysAndRelays
+		getRequiredPubkysAndRelays,
+		getStates
 	} from '$lib/utils';
 	import { onMount } from 'svelte';
 
@@ -603,6 +605,15 @@
 			</label>
 		</dd>
 	</dl>
+	<ul>
+		<li>Total: {filteredRelays.length} Relays</li>
+		{#each ['🟢', '🔵', '🔴', '🟡', '🟣'] as mark (mark)}
+			<li>
+				{mark}: {getCount(mark, filteredRelays, relayState)} Relays ({getStates(mark)?.join('/') ??
+					''})
+			</li>
+		{/each}
+	</ul>
 	<dl>
 		{#each filteredRelays as relay (relay)}
 			{@const pubkeys = filteredPubkeys.filter(([r]) => r === relay).at(0)}
