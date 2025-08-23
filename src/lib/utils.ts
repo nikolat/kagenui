@@ -109,12 +109,16 @@ export const getCount = (
 	const states: string[] | undefined = getStates(mark);
 	let filter: (relay: string) => boolean;
 	if (states === undefined) {
-		filter = (relay: string) =>
-			!['connected', 'dormant', 'error', 'rejected', 'connecting', 'retrying'].includes(
-				relayStateMap.get(relay) ?? ''
-			);
+		filter = (_relay: string): boolean => false;
 	} else {
-		filter = (relay: string) => states.includes(relayStateMap.get(relay) ?? '');
+		filter = (relay: string): boolean => {
+			const state: string | undefined = relayStateMap.get(relay);
+			if (state === undefined) {
+				return mark === '🟣';
+			} else {
+				return states.includes(state);
+			}
+		};
 	}
 	const count = filteredRelays.filter(filter).length;
 	return count;
