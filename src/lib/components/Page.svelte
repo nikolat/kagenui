@@ -448,30 +448,29 @@
 			content = await encrypt(targetPubkey, JSON.stringify(tags));
 			tags = [];
 		}
-		const eventTemplate: EventTemplate = {
-			kind: 10006,
-			tags,
-			content,
-			created_at: now()
-		};
-		const relays: string[] = Object.entries(relaysToUse)
-			.filter((r) => r[1].write)
-			.map((r) => r[0])
-			.filter((relay) => !blockedRelays.includes(relay));
-		const options: Partial<RxNostrSendOptions> | undefined =
-			relays.length > 0 ? { on: { relays } } : undefined;
-		const eventToSend = await window.nostr.signEvent(eventTemplate);
-		sendEvent(eventToSend, options);
+		sendBlockListEvent(tags, content);
+	};
+
+	const saveAsPrivateList = (): void => {
+		addRelaysToBlockLost([], true);
+	};
+
+	const saveAsPublicList = (): void => {
+		addRelaysToBlockLost([], false);
 	};
 
 	const clearBlockList = async (): Promise<void> => {
+		sendBlockListEvent([], '');
+	};
+
+	const sendBlockListEvent = async (tags: string[][], content: string): Promise<void> => {
 		if (relaysToUse === undefined || window.nostr === undefined) {
 			return;
 		}
 		const eventTemplate: EventTemplate = {
 			kind: 10006,
-			tags: [],
-			content: '',
+			tags,
+			content,
 			created_at: now()
 		};
 		const relays: string[] = Object.entries(relaysToUse)
@@ -563,9 +562,23 @@
 	<details>
 		<summary>Blocked Relays</summary>
 		<h3>Relays blocked</h3>
-		<button type="button" disabled={blockedRelays.length === 0} onclick={clearBlockList}
-			>Clear block list</button
-		>
+		<ul>
+			<li>
+				<button type="button" disabled={blockedRelays.length === 0} onclick={clearBlockList}
+					>Clear block list</button
+				>
+			</li>
+			<li>
+				<button type="button" disabled={blockedRelays.length === 0} onclick={saveAsPrivateList}
+					>Save as private list</button
+				>
+			</li>
+			<li>
+				<button type="button" disabled={blockedRelays.length === 0} onclick={saveAsPublicList}
+					>Save as public list</button
+				>
+			</li>
+		</ul>
 		<ul class="blocked-relays">
 			{#each blockedRelays as relay (relay)}
 				{@const state = relayState.find((rs) => rs[0] === relay)?.at(1) ?? ''}
@@ -577,20 +590,24 @@
 			{/each}
 		</ul>
 		<h3>Relays without response</h3>
-		{#each [true, false] as enableEncrypt (enableEncrypt)}
-			<button
-				type="button"
-				disabled={relaysToUse === undefined ||
-					deadRelays
-						.filter((relay) => relay.startsWith('wss://'))
-						.every((r) => blockedRelays.includes(r))}
-				onclick={() =>
-					addRelaysToBlockLost(
-						deadRelays.filter((relay) => relay.startsWith('wss://')),
-						enableEncrypt
-					)}>Add to the block list ({enableEncrypt ? 'Private' : 'Open'})</button
-			>
-		{/each}
+		<ul>
+			{#each [true, false] as enableEncrypt (enableEncrypt)}
+				<li>
+					<button
+						type="button"
+						disabled={relaysToUse === undefined ||
+							deadRelays
+								.filter((relay) => relay.startsWith('wss://'))
+								.every((r) => blockedRelays.includes(r))}
+						onclick={() =>
+							addRelaysToBlockLost(
+								deadRelays.filter((relay) => relay.startsWith('wss://')),
+								enableEncrypt
+							)}>Add to the block list ({enableEncrypt ? 'Private' : 'Public'})</button
+					>
+				</li>
+			{/each}
+		</ul>
 		<ul class="dead-relays">
 			{#each deadRelays.filter((relay) => relay.startsWith('wss://') && !blockedRelays.includes(relay)) as relay (relay)}
 				{@const state = relayState.find((rs) => rs[0] === relay)?.at(1) ?? ''}
@@ -598,15 +615,20 @@
 			{/each}
 		</ul>
 		<h3>Relays for which authentication is requested</h3>
-		{#each [true, false] as enableEncrypt (enableEncrypt)}
-			<button
-				type="button"
-				disabled={relaysToUse === undefined || authRelays.every((r) => blockedRelays.includes(r))}
-				onclick={() => {
-					addRelaysToBlockLost(authRelays, enableEncrypt);
-				}}>Add to the block list ({enableEncrypt ? 'Private' : 'Open'})</button
-			>
-		{/each}
+		<ul>
+			{#each [true, false] as enableEncrypt (enableEncrypt)}
+				<li>
+					<button
+						type="button"
+						disabled={relaysToUse === undefined ||
+							authRelays.every((r) => blockedRelays.includes(r))}
+						onclick={() => {
+							addRelaysToBlockLost(authRelays, enableEncrypt);
+						}}>Add to the block list ({enableEncrypt ? 'Private' : 'Public'})</button
+					>
+				</li>
+			{/each}
+		</ul>
 		<ul class="auth-relays">
 			{#each authRelays.filter((relay) => relay.startsWith('wss://') && !blockedRelays.includes(relay)) as relay (relay)}
 				<li><span title="auth required">✅</span>{relay}</li>
