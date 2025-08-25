@@ -32,7 +32,9 @@
 		siteurl
 	} from '$lib/config';
 	import {
+		getBlockedRelays,
 		getCount,
+		getEncrypt,
 		getMark,
 		getPubkeyFromNpub,
 		getRelaysToUseFromKind10002Event,
@@ -215,7 +217,7 @@
 			};
 			fetchEvents(rxNostr, next2, complete2, filter, { relays });
 		};
-		const next2 = (value: EventPacket): void => {
+		const next2 = async (value: EventPacket): Promise<void> => {
 			switch (value.event.kind) {
 				case 3:
 					ev3 = value.event;
@@ -225,9 +227,7 @@
 					relaysToUse = getRelaysToUseFromKind10002Event(ev10002);
 					break;
 				case 10006:
-					blockedRelays = value.event.tags
-						.filter((tag) => tag.length >= 2 && tag[0] === 'relay' && URL.canParse(tag[1]))
-						.map((tag) => tag[1]);
+					blockedRelays = await getBlockedRelays(value.event, targetPubkey);
 					break;
 				default:
 					break;
@@ -421,7 +421,10 @@
 		sendEvent(eventToSend, options);
 	};
 
-	const addRelaysToBlockLost = async (relaysToAdd: string[]): Promise<void> => {
+	const addRelaysToBlockLost = async (
+		relaysToAdd: string[],
+		enableEncrypt: boolean
+	): Promise<void> => {
 		if (relaysToUse === undefined || window.nostr === undefined) {
 			return;
 		}
@@ -429,10 +432,26 @@
 		for (const relay of relaysToAdd) {
 			blockedRelaysForEvent.add(relay);
 		}
+		let tags: string[][] = Array.from(blockedRelaysForEvent).map((relay) => ['relay', relay]);
+		let content: string = '';
+		if (enableEncrypt) {
+			const targetPubkey: string | null = getPubkeyFromNpub(npub);
+			if (targetPubkey === null) {
+				console.warn('cannot get pubeky');
+				return;
+			}
+			const encrypt = getEncrypt();
+			if (encrypt === null) {
+				console.warn('cannot encrypt');
+				return;
+			}
+			content = await encrypt(targetPubkey, JSON.stringify(tags));
+			tags = [];
+		}
 		const eventTemplate: EventTemplate = {
 			kind: 10006,
-			tags: Array.from(blockedRelaysForEvent).map((relay) => ['relay', relay]),
-			content: '',
+			tags,
+			content,
 			created_at: now()
 		};
 		const relays: string[] = Object.entries(relaysToUse)
@@ -558,15 +577,20 @@
 			{/each}
 		</ul>
 		<h3>Relays without response</h3>
-		<button
-			type="button"
-			disabled={relaysToUse === undefined ||
-				deadRelays
-					.filter((relay) => relay.startsWith('wss://'))
-					.every((r) => blockedRelays.includes(r))}
-			onclick={() => addRelaysToBlockLost(deadRelays.filter((relay) => relay.startsWith('wss://')))}
-			>Add to the block list</button
-		>
+		{#each [true, false] as enableEncrypt (enableEncrypt)}
+			<button
+				type="button"
+				disabled={relaysToUse === undefined ||
+					deadRelays
+						.filter((relay) => relay.startsWith('wss://'))
+						.every((r) => blockedRelays.includes(r))}
+				onclick={() =>
+					addRelaysToBlockLost(
+						deadRelays.filter((relay) => relay.startsWith('wss://')),
+						enableEncrypt
+					)}>Add to the block list ({enableEncrypt ? 'Private' : 'Open'})</button
+			>
+		{/each}
 		<ul class="dead-relays">
 			{#each deadRelays.filter((relay) => relay.startsWith('wss://') && !blockedRelays.includes(relay)) as relay (relay)}
 				{@const state = relayState.find((rs) => rs[0] === relay)?.at(1) ?? ''}
@@ -574,13 +598,15 @@
 			{/each}
 		</ul>
 		<h3>Relays for which authentication is requested</h3>
-		<button
-			type="button"
-			disabled={relaysToUse === undefined || authRelays.every((r) => blockedRelays.includes(r))}
-			onclick={() => {
-				addRelaysToBlockLost(authRelays);
-			}}>Add to the block list</button
-		>
+		{#each [true, false] as enableEncrypt (enableEncrypt)}
+			<button
+				type="button"
+				disabled={relaysToUse === undefined || authRelays.every((r) => blockedRelays.includes(r))}
+				onclick={() => {
+					addRelaysToBlockLost(authRelays, enableEncrypt);
+				}}>Add to the block list ({enableEncrypt ? 'Private' : 'Open'})</button
+			>
+		{/each}
 		<ul class="auth-relays">
 			{#each authRelays.filter((relay) => relay.startsWith('wss://') && !blockedRelays.includes(relay)) as relay (relay)}
 				<li><span title="auth required">✅</span>{relay}</li>

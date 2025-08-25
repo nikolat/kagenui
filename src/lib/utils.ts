@@ -52,6 +52,57 @@ export const getRelaysToUseFromKind10002Event = (event: NostrEvent): RelayRecord
 	return newRelays;
 };
 
+export const getEncrypt = (): ((pubkey: string, plaintext: string) => Promise<string>) | null => {
+	if (window.nostr?.nip44?.encrypt !== undefined) {
+		return window.nostr.nip44.encrypt;
+	} else if (window.nostr?.nip04?.encrypt !== undefined) {
+		return window.nostr.nip04.encrypt;
+	}
+	return null;
+};
+
+const getDecrypt = (
+	content: string
+): ((pubkey: string, ciphertext: string) => Promise<string>) | null => {
+	const isNIP04: boolean = content.includes('?iv=');
+	if (isNIP04 && window.nostr?.nip04?.decrypt !== undefined) {
+		return window.nostr.nip04.decrypt;
+	} else if (window.nostr?.nip44?.decrypt !== undefined) {
+		return window.nostr.nip44.decrypt;
+	}
+	return null;
+};
+
+export const getBlockedRelays = async (
+	event: NostrEvent,
+	loginPubkey: string
+): Promise<string[]> => {
+	const getRelayList = (tags: string[][]): string[] =>
+		Array.from(
+			new Set<string>(
+				tags
+					.filter((tag) => tag.length >= 2 && tag[0] === 'relay')
+					.map((tag) => normalizeURL(tag[1]))
+			)
+		);
+	const pubRelays: string[] = getRelayList(event.tags);
+	let secRelays: string[] = [];
+	if (event.content.length > 0) {
+		let contentList: string[][] = [];
+		const decrypt = getDecrypt(event.content);
+		if (decrypt !== null) {
+			try {
+				const content = await decrypt(loginPubkey, event.content);
+				contentList = JSON.parse(content);
+			} catch (error) {
+				console.warn(error);
+			}
+		}
+		secRelays = getRelayList(contentList);
+	}
+	return Array.from(new Set<string>([...pubRelays, ...secRelays]));
+};
+
 export const getMark = (state: string): string => {
 	let mark: string;
 	switch (state) {
