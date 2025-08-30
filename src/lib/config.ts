@@ -6,9 +6,10 @@ export const siteurl = 'https://nikolat.github.io/kagenui/';
 export const indexerRelays = [
 	'wss://directory.yabu.me/',
 	'wss://purplepag.es/',
+	'wss://user.kindpag.es/',
 	'wss://indexer.coracle.social/'
 ];
-export const profileRelays = ['wss://directory.yabu.me/'];
+export const profileRelays = ['wss://directory.yabu.me/', 'wss://user.kindpag.es/'];
 export const linkGitHub = 'https://github.com/nikolat/kagenui';
 export const linkto = 'https://nostx.io/';
 export const getRoboHashURL = (pubkey: string) => {
