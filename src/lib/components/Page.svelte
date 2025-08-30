@@ -42,6 +42,7 @@
 		getStates
 	} from '$lib/utils';
 	import { onMount } from 'svelte';
+	import { SvelteMap } from 'svelte/reactivity';
 
 	type Profile = {
 		name?: string;
@@ -59,7 +60,7 @@
 	let savedRelaysRead: string[] = $state([]);
 	let userPubkeysWrite: [string, string[]][] = $state([]);
 	let userPubkeysRead: [string, string[]][] = $state([]);
-	let profileMap = $state(new Map<string, Profile>());
+	let profileMap = new SvelteMap<string, Profile>();
 	let blockedRelays: string[] = $state([]);
 	let authRelays: string[] = $state([]);
 	let isGettingEvents = $state(false);
@@ -67,7 +68,8 @@
 	let relayType: RelayType = $state('Write');
 	let groupType: GroupType = $state('All');
 	let relaysToUse: RelayRecord | undefined = $state();
-	let countFollowees: number = $state(0);
+	let followingPubkeys: string[] = $state([]);
+	let pubkeysWithoutKind10002: string[] = $state([]);
 	const relayStateMap: Map<string, string> = new Map<string, string>();
 	let relayState: [string, string][] = $state([]);
 	const deadRelays: string[] = $derived(
@@ -137,7 +139,8 @@
 		relayStateMap.clear();
 		relayState = [];
 		authRelays = [];
-		countFollowees = 0;
+		followingPubkeys = [];
+		pubkeysWithoutKind10002 = [];
 		const retry: RetryConfig = {
 			strategy: 'exponential',
 			maxCount: 3,
@@ -241,11 +244,10 @@
 				isGettingEvents = false;
 				return;
 			}
-			const followingPubkeys = ev3.tags
+			followingPubkeys = ev3.tags
 				.filter((tag) => tag.length >= 2 && tag[0] === 'p')
 				.map((tag) => tag[1]);
-			countFollowees = followingPubkeys.length;
-			console.log('followees:', followingPubkeys);
+			console.log('followees:', $state.snapshot(followingPubkeys));
 			message = `${followingPubkeys.length} followees`;
 			const filter: LazyFilter = {
 				kinds: [10002],
@@ -284,7 +286,10 @@
 					}
 				}
 			}
-			const followingPubkeys = Array.from(ev10002Map.keys());
+			const pubkeysWithKind10002: string[] = Array.from(ev10002Map.keys());
+			pubkeysWithoutKind10002 = followingPubkeys.filter(
+				(pubkey) => !pubkeysWithKind10002.includes(pubkey)
+			);
 			const relaysAll: string[] = Array.from(userPubkeysWriteMap.keys());
 			message = `profiles of ${followingPubkeys.length} followees fetching...`;
 			profileMap.clear();
@@ -660,7 +665,7 @@
 		</dd>
 	</dl>
 	<ul>
-		<li>Followees: {countFollowees}</li>
+		<li>Followees: {followingPubkeys.length}</li>
 		<li>Total: {filteredRelays.length} Relays</li>
 		{#each ['🟢', '🔵', '🔴', '🟡', '🟣'] as mark (mark)}
 			<li>
@@ -670,6 +675,30 @@
 		{/each}
 	</ul>
 	<dl>
+		{#if pubkeysWithoutKind10002.length > 0}
+			<dt>pubkeys without kind:10002</dt>
+			<dd>
+				<span>
+					{#each pubkeysWithoutKind10002 as pubkey (pubkey)}
+						{@const prof = profileMap.get(pubkey)}
+						{@const name = prof?.name ?? nip19.npubEncode(pubkey).slice(0, 10) + '...'}
+						{@const display_name = prof?.display_name ?? ''}
+						{@const picture =
+							prof !== undefined && URL.canParse(prof.picture ?? '')
+								? prof.picture
+								: getRoboHashURL(pubkey)}
+						<a href="{linkto}{nip19.npubEncode(pubkey)}" target="_blank" rel="noopener noreferrer"
+							><img
+								src={picture}
+								alt="@{name}"
+								title="{display_name} @{name}"
+								class="avatar_relay"
+							/></a
+						>
+					{/each}
+				</span>
+			</dd>
+		{/if}
 		{#each filteredRelays as relay (relay)}
 			{@const pubkeys = filteredPubkeys.filter(([r]) => r === relay).at(0)}
 			{@const state = relayState.find((rs) => rs[0] === relay)?.at(1) ?? ''}
@@ -685,7 +714,10 @@
 						{@const prof = profileMap.get(pubkey)}
 						{@const name = prof?.name ?? nip19.npubEncode(pubkey).slice(0, 10) + '...'}
 						{@const display_name = prof?.display_name ?? ''}
-						{@const picture = prof?.picture ?? getRoboHashURL(pubkey)}
+						{@const picture =
+							prof !== undefined && URL.canParse(prof.picture ?? '')
+								? prof.picture
+								: getRoboHashURL(pubkey)}
 						<a href="{linkto}{nip19.npubEncode(pubkey)}" target="_blank" rel="noopener noreferrer"
 							><img
 								src={picture}
