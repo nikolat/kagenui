@@ -444,7 +444,7 @@
 		sendEvent(eventToSend, options);
 	};
 
-	const addRelaysToBlockLost = async (
+	const addRelaysToBlockList = async (
 		relaysToAdd: string[],
 		enableEncrypt: boolean
 	): Promise<void> => {
@@ -475,11 +475,11 @@
 	};
 
 	const saveAsPrivateList = (): void => {
-		addRelaysToBlockLost([], true);
+		addRelaysToBlockList([], true);
 	};
 
 	const saveAsPublicList = (): void => {
-		addRelaysToBlockLost([], false);
+		addRelaysToBlockList([], false);
 	};
 
 	const clearBlockList = async (): Promise<void> => {
@@ -623,7 +623,7 @@
 								.filter((relay) => relay.startsWith('wss://'))
 								.every((r) => blockedRelays.includes(r))}
 						onclick={() =>
-							addRelaysToBlockLost(
+							addRelaysToBlockList(
 								deadRelays.filter((relay) => relay.startsWith('wss://')),
 								enableEncrypt
 							)}>Add to the block list ({enableEncrypt ? 'Private' : 'Public'})</button
@@ -646,7 +646,7 @@
 						disabled={relaysToUse === undefined ||
 							authRelays.every((r) => blockedRelays.includes(r))}
 						onclick={() => {
-							addRelaysToBlockLost(authRelays, enableEncrypt);
+							addRelaysToBlockList(authRelays, enableEncrypt);
 						}}>Add to the block list ({enableEncrypt ? 'Private' : 'Public'})</button
 					>
 				</li>
