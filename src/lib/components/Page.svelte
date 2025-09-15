@@ -72,6 +72,11 @@
 	let pubkeysWithoutKind10002: string[] = $state([]);
 	const relayStateMap: Map<string, string> = new Map<string, string>();
 	let relayState: [string, string][] = $state([]);
+	const relayResponseTimeMap: Map<string, [start: number | undefined, end: number | undefined]> =
+		new Map<string, [start: number | undefined, end: number | undefined]>();
+	let relayResponseTime: [string, [start: number | undefined, end: number | undefined]][] = $state(
+		[]
+	);
 	const deadRelays: string[] = $derived(
 		relayState.filter((rs) => ['error', 'rejected'].includes(rs[1])).map((rs) => rs[0])
 	);
@@ -79,6 +84,17 @@
 		const relay: string = normalizeURL(packet.from);
 		relayStateMap.set(relay, packet.state);
 		relayState = Array.from(relayStateMap.entries());
+		if (['connecting', 'retrying'].includes(packet.state)) {
+			relayResponseTimeMap.set(relay, [Date.now(), undefined]);
+		} else if (['connected', 'error', 'rejected'].includes(packet.state)) {
+			const c = relayResponseTimeMap.get(relay);
+			if (c !== undefined) {
+				relayResponseTimeMap.set(relay, [c[0], Date.now()]);
+			}
+		} else {
+			return;
+		}
+		relayResponseTime = Array.from(relayResponseTimeMap.entries());
 	};
 
 	const getNpubWithNIP07 = async () => {
@@ -138,6 +154,8 @@
 		blockedRelays = [];
 		relayStateMap.clear();
 		relayState = [];
+		relayResponseTimeMap.clear();
+		relayResponseTime = [];
 		authRelays = [];
 		followingPubkeys = [];
 		pubkeysWithoutKind10002 = [];
@@ -687,7 +705,10 @@
 							prof !== undefined && URL.canParse(prof.picture ?? '')
 								? prof.picture
 								: getRoboHashURL(pubkey)}
-						<a href="{linkto}{nip19.npubEncode(pubkey)}" target="_blank" rel="noopener noreferrer"
+						<a
+							href={`${linkto}${nip19.npubEncode(pubkey)}`}
+							target="_blank"
+							rel="noopener noreferrer"
 							><img
 								src={picture}
 								alt="@{name}"
@@ -702,6 +723,10 @@
 		{#each filteredRelays as relay (relay)}
 			{@const pubkeys = filteredPubkeys.filter(([r]) => r === relay).at(0)}
 			{@const state = relayState.find((rs) => rs[0] === relay)?.at(1) ?? ''}
+			{@const responseTime = relayResponseTime.find((rs) => rs[0] === relay)?.at(1)}
+			{@const start = responseTime?.at(0)}
+			{@const end = responseTime?.at(1)}
+			{@const time = typeof start === 'number' && typeof end === 'number' ? end - start : undefined}
 			<dt>
 				<span title={state}>{getMark(state)}</span>
 				{#if blockedRelays.includes(relay)}<span title="blocked by you">🚫</span>{/if}
@@ -709,6 +734,12 @@
 				{relay}
 			</dt>
 			<dd>
+				{#if time !== undefined}
+					<span title="time">
+						⏱ <time class={time < 1000 ? 'short' : time < 10000 ? 'normal' : 'long'}>{time}</time> ms
+					</span>
+					<br />
+				{/if}
 				<span>
 					{#each pubkeys?.at(1) ?? [] as pubkey (pubkey)}
 						{@const prof = profileMap.get(pubkey)}
@@ -718,7 +749,10 @@
 							prof !== undefined && URL.canParse(prof.picture ?? '')
 								? prof.picture
 								: getRoboHashURL(pubkey)}
-						<a href="{linkto}{nip19.npubEncode(pubkey)}" target="_blank" rel="noopener noreferrer"
+						<a
+							href={`${linkto}${nip19.npubEncode(pubkey)}`}
+							target="_blank"
+							rel="noopener noreferrer"
 							><img
 								src={picture}
 								alt="@{name}"
@@ -753,6 +787,12 @@
 	.read,
 	.write {
 		width: 2em;
+	}
+	time.short {
+		color: green;
+	}
+	time.long {
+		color: red;
 	}
 	li {
 		list-style: none;
