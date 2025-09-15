@@ -727,6 +727,7 @@
 			{@const start = responseTime?.at(0)}
 			{@const end = responseTime?.at(1)}
 			{@const time = typeof start === 'number' && typeof end === 'number' ? end - start : undefined}
+			{@const users = pubkeys?.at(1)?.length ?? 0}
 			<dt>
 				<span title={state}>{getMark(state)}</span>
 				{#if blockedRelays.includes(relay)}<span title="blocked by you">🚫</span>{/if}
@@ -735,11 +736,14 @@
 			</dt>
 			<dd>
 				{#if time !== undefined}
-					<span title="time">
+					<span class="time">
 						⏱ <time class={time < 1000 ? 'short' : time < 10000 ? 'normal' : 'long'}>{time}</time> ms
 					</span>
-					<br />
 				{/if}
+				<span class="users">
+					👥 {users} user{#if users > 1}s{/if}
+				</span>
+				<br />
 				<span>
 					{#each pubkeys?.at(1) ?? [] as pubkey (pubkey)}
 						{@const prof = profileMap.get(pubkey)}
