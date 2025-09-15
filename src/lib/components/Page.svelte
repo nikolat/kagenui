@@ -448,30 +448,45 @@
 		relaysToAdd: string[],
 		enableEncrypt: boolean
 	): Promise<void> => {
-		if (relaysToUse === undefined || window.nostr === undefined) {
-			return;
-		}
 		const blockedRelaysForEvent = new Set<string>(blockedRelays);
 		for (const relay of relaysToAdd) {
 			blockedRelaysForEvent.add(relay);
 		}
+		const [tags, content] = await makeBlockList(blockedRelaysForEvent, enableEncrypt);
+		await sendBlockListEvent(tags, content);
+	};
+
+	const removeRelaysfromBlockList = async (
+		relaysToRemove: string[],
+		enableEncrypt: boolean
+	): Promise<void> => {
+		const blockedRelaysForEvent = new Set<string>(blockedRelays);
+		for (const relay of relaysToRemove) {
+			blockedRelaysForEvent.delete(relay);
+		}
+		const [tags, content] = await makeBlockList(blockedRelaysForEvent, enableEncrypt);
+		await sendBlockListEvent(tags, content);
+	};
+
+	const makeBlockList = async (
+		blockedRelaysForEvent: Set<string>,
+		enableEncrypt: boolean
+	): Promise<[tags: string[][], content: string]> => {
 		let tags: string[][] = Array.from(blockedRelaysForEvent).map((relay) => ['relay', relay]);
 		let content: string = '';
 		if (enableEncrypt) {
 			const targetPubkey: string | null = getPubkeyFromNpub(npub);
 			if (targetPubkey === null) {
-				console.warn('cannot get pubeky');
-				return;
+				throw Error('cannot get pubeky');
 			}
 			const encrypt = getEncrypt();
 			if (encrypt === null) {
-				console.warn('cannot encrypt');
-				return;
+				throw Error('cannot encrypt');
 			}
 			content = await encrypt(targetPubkey, JSON.stringify(tags));
 			tags = [];
 		}
-		sendBlockListEvent(tags, content);
+		return [tags, content];
 	};
 
 	const saveAsPrivateList = (): void => {
@@ -483,7 +498,7 @@
 	};
 
 	const clearBlockList = async (): Promise<void> => {
-		sendBlockListEvent([], '');
+		await sendBlockListEvent([], '');
 	};
 
 	const sendBlockListEvent = async (tags: string[][], content: string): Promise<void> => {
@@ -743,6 +758,21 @@
 				<span class="users">
 					👥 {users} user{#if users > 1}s{/if}
 				</span>
+				{#if blockedRelays.includes(relay)}
+					<button
+						type="button"
+						class="block-relay"
+						disabled={relaysToUse === undefined}
+						onclick={() => removeRelaysfromBlockList([relay], true)}>🚫unblock</button
+					>
+				{:else}
+					<button
+						type="button"
+						class="block-relay"
+						disabled={relaysToUse === undefined}
+						onclick={() => addRelaysToBlockList([relay], true)}>🚫block</button
+					>
+				{/if}
 				<br />
 				<span>
 					{#each pubkeys?.at(1) ?? [] as pubkey (pubkey)}
@@ -797,6 +827,10 @@
 	}
 	time.long {
 		color: red;
+	}
+	button.block-relay {
+		margin: 0;
+		padding: 0 3px;
 	}
 	li {
 		list-style: none;
