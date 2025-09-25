@@ -113,7 +113,7 @@
 		rxNostr: RxNostr,
 		next: (value: EventPacket) => void,
 		complete: () => void,
-		filter: LazyFilter,
+		filters: LazyFilter | LazyFilter[],
 		options?: Partial<RxNostrUseOptions>
 	) => {
 		const rxReq = createRxBackwardReq();
@@ -127,7 +127,7 @@
 				next,
 				complete
 			});
-		rxReq.emit(filter);
+		rxReq.emit(filters);
 		rxReq.over();
 	};
 	const fetchFoward = (
@@ -184,6 +184,14 @@
 					}
 				}
 			);
+	};
+
+	const fetchLimit = 500;
+	const sliceByNumber = (array: string[], number: number): string[][] => {
+		const length = Math.ceil(array.length / number);
+		return new Array(length)
+			.fill(undefined)
+			.map((_, i) => array.slice(i * number, (i + 1) * number));
 	};
 
 	const getRelays = async () => {
@@ -267,12 +275,16 @@
 				.map((tag) => tag[1]);
 			console.log('followees:', $state.snapshot(followingPubkeys));
 			message = `${followingPubkeys.length} followees`;
-			const filter: LazyFilter = {
-				kinds: [10002],
-				authors: followingPubkeys,
-				until: now
-			};
-			fetchEvents(rxNostr, next3, complete3, filter);
+			const filters: LazyFilter[] = [];
+			for (const pubkeys of sliceByNumber(followingPubkeys, fetchLimit)) {
+				const filter: LazyFilter = {
+					kinds: [10002],
+					authors: pubkeys,
+					until: now
+				};
+				filters.push(filter);
+			}
+			fetchEvents(rxNostr, next3, complete3, filters);
 		};
 		const next3 = (value: EventPacket): void => {
 			ev10002Map.set(value.event.pubkey, value.event);
@@ -311,12 +323,16 @@
 			const relaysAll: string[] = Array.from(userPubkeysWriteMap.keys());
 			message = `profiles of ${followingPubkeys.length} followees fetching...`;
 			profileMap.clear();
-			const filter: LazyFilter = {
-				kinds: [0],
-				authors: followingPubkeys,
-				until: now
-			};
-			fetchEvents(rxNostr, next4, complete4, filter, { relays: profileRelays });
+			const filters: LazyFilter[] = [];
+			for (const pubkeys of sliceByNumber(followingPubkeys, fetchLimit)) {
+				const filter: LazyFilter = {
+					kinds: [0],
+					authors: pubkeys,
+					until: now
+				};
+				filters.push(filter);
+			}
+			fetchEvents(rxNostr, next4, complete4, filters, { relays: profileRelays });
 			fetchEvents(
 				rxNostr,
 				(_value: EventPacket) => {},
