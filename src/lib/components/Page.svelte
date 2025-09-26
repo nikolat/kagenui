@@ -70,6 +70,7 @@
 	let relaysToUse: RelayRecord | undefined = $state();
 	let followingPubkeys: string[] = $state([]);
 	let pubkeysWithoutKind10002: string[] = $state([]);
+	let showUsers: boolean = $state(false);
 	const relayStateMap: Map<string, string> = new Map<string, string>();
 	let relayState: [string, string][] = $state([]);
 	const relayResponseTimeMap: Map<string, [start: number | undefined, end: number | undefined]> =
@@ -712,6 +713,8 @@
 				Required
 			</label>
 		</dd>
+		<dt>Show Users</dt>
+		<dd><input type="checkbox" bind:checked={showUsers} /></dd>
 	</dl>
 	<ul>
 		<li>Followees: {followingPubkeys.length}</li>
@@ -724,7 +727,7 @@
 		{/each}
 	</ul>
 	<dl>
-		{#if pubkeysWithoutKind10002.length > 0}
+		{#if showUsers && pubkeysWithoutKind10002.length > 0}
 			<dt>pubkeys without kind:10002</dt>
 			<dd>
 				<span>
@@ -789,29 +792,31 @@
 						onclick={() => addRelaysToBlockList([relay], true)}>🚫block</button
 					>
 				{/if}
-				<br />
-				<span>
-					{#each pubkeys?.at(1) ?? [] as pubkey (pubkey)}
-						{@const prof = profileMap.get(pubkey)}
-						{@const name = prof?.name ?? nip19.npubEncode(pubkey).slice(0, 10) + '...'}
-						{@const display_name = prof?.display_name ?? ''}
-						{@const picture =
-							prof !== undefined && URL.canParse(prof.picture ?? '')
-								? prof.picture
-								: getRoboHashURL(pubkey)}
-						<a
-							href={`${linkto}${nip19.npubEncode(pubkey)}`}
-							target="_blank"
-							rel="noopener noreferrer"
-							><img
-								src={picture}
-								alt="@{name}"
-								title="{display_name} @{name}"
-								class="avatar_relay"
-							/></a
-						>
-					{/each}
-				</span>
+				{#if showUsers}
+					<br />
+					<span>
+						{#each pubkeys?.at(1) ?? [] as pubkey (pubkey)}
+							{@const prof = profileMap.get(pubkey)}
+							{@const name = prof?.name ?? nip19.npubEncode(pubkey).slice(0, 10) + '...'}
+							{@const display_name = prof?.display_name ?? ''}
+							{@const picture =
+								prof !== undefined && URL.canParse(prof.picture ?? '')
+									? prof.picture
+									: getRoboHashURL(pubkey)}
+							<a
+								href={`${linkto}${nip19.npubEncode(pubkey)}`}
+								target="_blank"
+								rel="noopener noreferrer"
+								><img
+									src={picture}
+									alt="@{name}"
+									title="{display_name} @{name}"
+									class="avatar_relay"
+								/></a
+							>
+						{/each}
+					</span>
+				{/if}
 			</dd>
 		{/each}
 	</dl>
@@ -870,6 +875,7 @@
 		white-space: pre-wrap;
 		margin-bottom: 1em;
 		max-height: 40em;
+		min-height: 1.6em;
 		overflow-y: auto;
 	}
 	footer {
