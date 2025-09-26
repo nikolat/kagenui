@@ -291,7 +291,6 @@
 			ev10002Map.set(value.event.pubkey, value.event);
 		};
 		//フォローイーのプロフィールを取得(アイコン表示のため)
-		//同時にフォローイーのリレーリストすべてにテキトーなREQを投げて疎通確認
 		const complete3 = (): void => {
 			for (const [pubkey, event] of ev10002Map) {
 				for (const tag of event.tags.filter(
@@ -321,7 +320,6 @@
 			pubkeysWithoutKind10002 = followingPubkeys.filter(
 				(pubkey) => !pubkeysWithKind10002.includes(pubkey)
 			);
-			const relaysAll: string[] = Array.from(userPubkeysWriteMap.keys());
 			message = `profiles of ${followingPubkeys.length} followees fetching...`;
 			profileMap.clear();
 			const filters: LazyFilter[] = [];
@@ -334,13 +332,6 @@
 				filters.push(filter);
 			}
 			fetchEvents(rxNostr, next4, complete4, filters, { relays: profileRelays });
-			fetchEvents(
-				rxNostr,
-				(_value: EventPacket) => {},
-				() => {},
-				{ kinds: [0], authors: [targetPubkey], until: now },
-				{ relays: relaysAll }
-			);
 		};
 		const next4 = (value: EventPacket): void => {
 			let profile;
@@ -351,9 +342,19 @@
 				return;
 			}
 			profileMap.set(value.event.pubkey, profile);
+			message = `profiles of ${followingPubkeys.length} followees fetching... (${profileMap.size}/${followingPubkeys.length})`;
 		};
-		//完了 引き続き自身のフォローリスト・リレーリスト・ブロックリストを取得
+		//完了 引き続き自身のフォローリスト・リレーリスト・ブロックリストの更新を監視
+		//同時にフォローイーのリレーリストすべてにテキトーなREQを投げて疎通確認
 		const complete4 = (): void => {
+			const relaysAll: string[] = Array.from(userPubkeysWriteMap.keys());
+			fetchEvents(
+				rxNostr,
+				(_value: EventPacket) => {},
+				() => {},
+				{ kinds: [0], authors: [targetPubkey], until: now },
+				{ relays: relaysAll }
+			);
 			const userPubkeysWriteBase: [string, string[]][] = [];
 			const userPubkeysReadBase: [string, string[]][] = [];
 			for (const [relay, pubkeySet] of userPubkeysWriteMap) {
