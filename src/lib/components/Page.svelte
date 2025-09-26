@@ -115,14 +115,15 @@
 		next: (value: EventPacket) => void,
 		complete: () => void,
 		filters: LazyFilter | LazyFilter[],
-		options?: Partial<RxNostrUseOptions>
+		options?: Partial<RxNostrUseOptions>,
+		timeout: number = 1000
 	) => {
 		const rxReq = createRxBackwardReq();
 		rxNostr
 			.use(rxReq, options)
 			.pipe(
 				latestEach(({ event }) => `${event.kind}:${event.pubkey}`),
-				completeOnTimeout(1000)
+				completeOnTimeout(timeout)
 			)
 			.subscribe({
 				next,
@@ -245,7 +246,7 @@
 				authors: [targetPubkey],
 				until: now
 			};
-			fetchEvents(rxNostr, next2, complete2, filter, { relays });
+			fetchEvents(rxNostr, next2, complete2, filter, { relays }, 5000);
 		};
 		const next2 = async (value: EventPacket): Promise<void> => {
 			switch (value.event.kind) {
