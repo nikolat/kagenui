@@ -240,7 +240,7 @@
 			}
 			const relays = Array.from(relaySet);
 			console.info('relays:', relays);
-			message = `${relays.length} relays`;
+			message = `fetching kind:3,10002,10006 events from ${relays.length} outbox relays ...`;
 			const filter: LazyFilter = {
 				kinds: [3, 10002, 10006],
 				authors: [targetPubkey],
@@ -276,7 +276,7 @@
 				.filter((tag) => tag.length >= 2 && tag[0] === 'p')
 				.map((tag) => tag[1]);
 			console.log('followees:', $state.snapshot(followingPubkeys));
-			message = `${followingPubkeys.length} followees`;
+			message = `fetching relays of ${followingPubkeys.length} followees...`;
 			const filters: LazyFilter[] = [];
 			for (const pubkeys of sliceByNumber(followingPubkeys, fetchLimit)) {
 				const filter: LazyFilter = {
@@ -290,6 +290,7 @@
 		};
 		const next3 = (value: EventPacket): void => {
 			ev10002Map.set(value.event.pubkey, value.event);
+			message = `fetching relays of ${followingPubkeys.length} followees... (${ev10002Map.size}/${followingPubkeys.length})`;
 		};
 		//フォローイーのプロフィールを取得(アイコン表示のため)
 		const complete3 = (): void => {
@@ -321,7 +322,7 @@
 			pubkeysWithoutKind10002 = followingPubkeys.filter(
 				(pubkey) => !pubkeysWithKind10002.includes(pubkey)
 			);
-			message = `profiles of ${followingPubkeys.length} followees fetching...`;
+			message = `fetching profiles of ${followingPubkeys.length} followees...`;
 			profileMap.clear();
 			const filters: LazyFilter[] = [];
 			for (const pubkeys of sliceByNumber(followingPubkeys, fetchLimit)) {
@@ -343,7 +344,7 @@
 				return;
 			}
 			profileMap.set(value.event.pubkey, profile);
-			message = `profiles of ${followingPubkeys.length} followees fetching... (${profileMap.size}/${followingPubkeys.length})`;
+			message = `fetching profiles of ${followingPubkeys.length} followees... (${profileMap.size}/${followingPubkeys.length})`;
 		};
 		//完了 引き続き自身のフォローリスト・リレーリスト・ブロックリストの更新を監視
 		//同時にフォローイーのリレーリストすべてにテキトーなREQを投げて疎通確認
