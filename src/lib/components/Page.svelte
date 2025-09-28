@@ -272,9 +272,21 @@
 				isGettingEvents = false;
 				return;
 			}
-			followingPubkeys = ev3.tags
+			const followingPubkeysFromEvent = ev3.tags
 				.filter((tag) => tag.length >= 2 && tag[0] === 'p')
 				.map((tag) => tag[1]);
+			const followingPubkeySet = new Set<string>();
+			for (const pubkey of followingPubkeysFromEvent) {
+				try {
+					nip19.npubEncode(pubkey);
+				} catch (error) {
+					console.info(`pubkey: ${pubkey}`);
+					console.warn(error);
+					continue;
+				}
+				followingPubkeySet.add(pubkey);
+			}
+			followingPubkeys = Array.from(followingPubkeySet);
 			console.log('followees:', $state.snapshot(followingPubkeys));
 			message = `fetching relays of ${followingPubkeys.length} followees...`;
 			const filters: LazyFilter[] = [];
